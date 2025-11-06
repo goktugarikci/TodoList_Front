@@ -1,3 +1,4 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/common/Modal.tsx
 import React, { ReactNode } from 'react';
 
 interface ModalProps {
@@ -5,7 +6,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'; // GÜNCELLENDİ: xl ve 2xl eklendi
 }
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md' }) => {
@@ -15,6 +16,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
+    xl: 'max-w-xl',   // YENİ
+    '2xl': 'max-w-2xl', // YENİ
   };
 
   const handleModalContentClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -33,9 +36,10 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
         className={`bg-zinc-800 rounded-lg shadow-xl w-full m-4 ${sizeClasses[size]}`}
         onClick={handleModalContentClick}
       >
-        {/* Modal Başlığı: Sınır (border-zinc-700), Metin (text-zinc-100) */}
+        {/* Modal Başlığı: Sınır (border-zinc-700) */}
         <div className="flex justify-between items-center p-4 border-b border-zinc-700">
-          <h3 id="modal-title" className="text-xl font-semibold text-zinc-100">
+          {/* GÜNCELLENDİ: Başlık Rengi text-zinc-100 -> text-amber-400 */}
+          <h3 id="modal-title" className="text-xl font-semibold text-amber-400">
             {title}
           </h3>
           <button

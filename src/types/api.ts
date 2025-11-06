@@ -1,3 +1,4 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/types/api.ts
 // ===================================================================
 // 1. ENUM'LAR (Prisma Enum'larının TypeScript Karşılığı)
 // ===================================================================
@@ -207,6 +208,7 @@ export interface TaskDetailed {
   assignees: UserAssigneeDto[];
   tags: Tag[];
   checklistItems: ChecklistItemDetailed[];
+  attachments: TaskAttachment[]; // GÜNCELLENDİ: Ekler buraya eklendi
   _count: TaskCounts;
   // DÜZELTME: API'den gelen yanıta boardId eklenmesi
   taskListId: string;

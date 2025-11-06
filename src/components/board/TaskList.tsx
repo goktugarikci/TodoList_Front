@@ -1,27 +1,28 @@
-import React, { useState, Fragment, useRef, useEffect } from 'react'; // Fragment, useRef, useEffect eklendi
-// DÜZELTME: 'BoardDetailed' tipini import et
-import type { TaskList as TaskListType, BoardDetailed, TaskDetailed } from '../../types/api'; 
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/board/TaskList.tsx
+import React, { useState, Fragment, useRef, useEffect } from 'react';
+import type { TaskList as TaskListType, BoardDetailed, TaskDetailed, TaskApprovalStatus, ChecklistItemDetailed } from '../../types/api'; 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { taskService } from '../../services/taskService';
-import { taskListService } from '../../services/taskListService'; // Liste işlemleri için
+import { taskListService } from '../../services/taskListService'; 
+import { checklistService } from '../../services/checklistService';
 import { getErrorMessage } from '../../utils/errorHelper';
-import TaskCard from './TaskCard'; // Görev Kartı bileşeni
+import TaskCard from './TaskCard'; 
 import Spinner from '../common/Spinner';
 import { toast } from 'react-hot-toast';
-import { Menu, Transition } from '@headlessui/react'; // YENİ: Açılır menü
+import { Menu, Transition } from '@headlessui/react'; 
+// DÜZELTME: ModalView tipini import et
+import { ModalView } from '../../pages/BoardDetailPage';
 
 interface TaskListProps {
   list: TaskListType;
-  // YENİ: Kart'a tıklandığında ana sayfaya haber vermek için
-  onTaskClick: (task: TaskDetailed) => void; 
+  onOpenModal: (task: TaskDetailed, view: ModalView) => void; 
 }
 
-const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
+const TaskList: React.FC<TaskListProps> = ({ list, onOpenModal }) => {
   const queryClient = useQueryClient();
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [isAddingTask, setIsAddingTask] = useState(false); // Görev ekleme formu
+  const [isAddingTask, setIsAddingTask] = useState(false); 
   
-  // YENİ: Liste adını değiştirmek için (İstek 1)
   const [isRenamingList, setIsRenamingList] = useState(false);
   const [currentListTitle, setCurrentListTitle] = useState(list.title);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -31,47 +32,100 @@ const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
       renameInputRef.current.select();
     }
   }, [isRenamingList]);
+  
+  // --- Önbelleği (Cache) güncellemek için yardımcı fonksiyonlar ---
+  const updateTaskInCache = (updatedTask: TaskDetailed) => {
+    queryClient.setQueryData<BoardDetailed>(['boardDetails', list.boardId], (oldData) => {
+        if (!oldData) return oldData;
+        const newListData = oldData.lists.map(l => ({
+          ...l,
+          tasks: l.tasks.map(t => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
+        }));
+        return { ...oldData, lists: newListData };
+      });
+  };
+  
+  const updateChecklistItemInCache = (updatedItem: ChecklistItemDetailed) => {
+    queryClient.setQueryData<BoardDetailed>(['boardDetails', list.boardId], (oldData) => {
+      if (!oldData) return oldData;
+      const newListData = oldData.lists.map(l => ({
+        ...l,
+        tasks: l.tasks.map(t => (t.id === updatedItem.taskId ? { 
+          ...t,
+          checklistItems: (t.checklistItems || []).map(item => (item.id === updatedItem.id ? updatedItem : item))
+        } : t))
+      }));
+      return { ...oldData, lists: newListData };
+    });
+  };
 
-  // Görev (Alt Başlık) Ekleme Mutasyonu
+
+  // --- Görev Mutasyonları (TaskCard'a gönderilecek) ---
+
   const createTaskMutation = useMutation({
     mutationFn: () => taskService.createTask({
       title: newTaskTitle,
       taskListId: list.id,
     }),
     onSuccess: (newTask) => {
-      // DÜZELTME: 'boardId'yi 'list' objesinden al
-      const boardId = list.boardId; 
-      
-      // Pano detay verisini ('boardDetails') anlık olarak güncelle
-      // DÜZELTME: 'oldData'ya 'BoardDetailed' tipini ver
-      queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
+      queryClient.setQueryData<BoardDetailed>(['boardDetails', list.boardId], (oldData) => {
         if (!oldData) return oldData;
-        
         const newListData = oldData.lists.map((l: TaskListType) => {
           if (l.id === list.id) {
-            
-            // DÜZELTME: API 'TaskDetailed'in tüm alanlarını döndürmez
             const newTaskWithDefaults: TaskDetailed = {
               ...newTask,
-              checklistItems: [], // Varsayılan boş dizi
-              // DÜZELTME: 'TaskCounts' tipi 'checklistItems' (s'siz) bekliyor
+              checklistItems: [], 
+              attachments: [],
               _count: { checklistItems: 0, comments: 0, attachments: 0 }, 
             };
-            
             return { ...l, tasks: [...l.tasks, newTaskWithDefaults] };
           }
           return l;
         });
         return { ...oldData, lists: newListData };
       });
-      
       setNewTaskTitle('');
       setIsAddingTask(false);
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Görev oluşturulamadı.')),
   });
 
-  // --- YENİ: Liste (Sütun) İşlemleri (İstek 1) ---
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => taskService.deleteTask(taskId),
+    onSuccess: (_, taskId) => {
+      queryClient.setQueryData<BoardDetailed>(['boardDetails', list.boardId], (oldData) => {
+        if (!oldData) return oldData;
+        const newListData = oldData.lists.map(l => ({
+          ...l,
+          tasks: l.tasks.filter(t => t.id !== taskId)
+        }));
+        return { ...oldData, lists: newListData };
+      });
+      toast.success('Görev silindi.');
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Görev silinemedi.')),
+  });
+
+  const updateTaskStatusMutation = useMutation({
+    mutationFn: ({ taskId, newStatus }: { taskId: string, newStatus: TaskApprovalStatus }) => 
+      taskService.updateTask(taskId, { approvalStatus: newStatus }),
+    onSuccess: (updatedTask) => {
+      updateTaskInCache(updatedTask); 
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Görev durumu güncellenemedi.')),
+  });
+  
+  // Alt Görev (Checklist) Onaylama Mutasyonu
+  const toggleChecklistItemMutation = useMutation({
+    mutationFn: (itemId: string) => checklistService.toggleChecklistItem(itemId),
+    onSuccess: (updatedItem) => {
+      updateChecklistItemInCache(updatedItem);
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Alt görev durumu güncellenemedi.')),
+  });
+
+
+  // --- Liste (Sütun) Mutasyonları ---
   
   const updateListTitleMutation = useMutation({
     mutationFn: () => taskListService.updateListTitle(list.id, currentListTitle),
@@ -100,6 +154,7 @@ const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
     onError: (err) => toast.error(getErrorMessage(err, 'Liste silinemedi.')),
   });
 
+  // --- Handler Fonksiyonları ---
   const handleAddTaskSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newTaskTitle.trim()) {
@@ -113,7 +168,7 @@ const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
       updateListTitleMutation.mutate();
     } else {
       setIsRenamingList(false);
-      setCurrentListTitle(list.title); // Değişiklik yoksa eskiye dön
+      setCurrentListTitle(list.title); 
     }
   };
   
@@ -122,13 +177,27 @@ const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
       deleteListMutation.mutate();
     }
   };
+
+  const handleDeleteTask = (taskId: string) => {
+    if (window.confirm("Bu görevi kalıcı olarak silmek istediğinizden emin misiniz?")) {
+      deleteTaskMutation.mutate(taskId);
+    }
+  };
+
+  const handleToggleComplete = (task: TaskDetailed) => {
+    const newStatus = task.approvalStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
+    updateTaskStatusMutation.mutate({ taskId: task.id, newStatus: newStatus });
+  };
   
-  // --- BİTİŞ: Liste İşlemleri ---
+  const handleToggleChecklistItem = (itemId: string) => {
+    toggleChecklistItemMutation.mutate(itemId);
+  };
+  
 
   return (
     <div className="flex-shrink-0 w-72 h-full bg-zinc-800 rounded-lg shadow-md p-3 flex flex-col">
       
-      {/* --- GÜNCELLENDİ: Liste Başlığı ve Menüsü (İstek 1) --- */}
+      {/* Liste Başlığı ve Menüsü */}
       <div className="flex justify-between items-center mb-3 px-1">
         {isRenamingList ? (
           <form onSubmit={handleRenameListSubmit} className="flex-1">
@@ -137,20 +206,19 @@ const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
               type="text"
               value={currentListTitle}
               onChange={(e) => setCurrentListTitle(e.target.value)}
-              onBlur={handleRenameListSubmit} // Dışarı tıklayınca da kaydet
+              onBlur={handleRenameListSubmit} 
               className="w-full px-2 py-1 border border-amber-400 bg-zinc-900 text-zinc-100 rounded-md"
             />
           </form>
         ) : (
           <h3 
             className="text-lg font-semibold text-zinc-100 cursor-pointer" 
-            onClick={() => setIsRenamingList(true)} // Tıklanınca ad değiştirmeyi aç
+            onClick={() => setIsRenamingList(true)}
           >
             {list.title}
           </h3>
         )}
         
-        {/* Liste Ayarları (3 nokta) Menüsü */}
         <Menu as="div" className="relative ml-2 flex-shrink-0">
           <Menu.Button className="p-1 rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700">
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
@@ -194,7 +262,6 @@ const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
           </Transition>
         </Menu>
       </div>
-      {/* --- BİTİŞ: Başlık --- */}
 
 
       {/* Görev (Alt Başlık) Listesi */}
@@ -203,7 +270,10 @@ const TaskList: React.FC<TaskListProps> = ({ list, onTaskClick }) => {
           <TaskCard 
             key={task.id} 
             task={task} 
-            onClick={() => onTaskClick(task)} // GÜNCELLENDİ: Ana sayfaya 'task' objesini gönder
+            onOpenModal={(view) => onOpenModal(task, view)}
+            onDeleteTask={() => handleDeleteTask(task.id)}
+            onToggleComplete={() => handleToggleComplete(task)}
+            onToggleChecklistItem={handleToggleChecklistItem}
           />
         ))}
       </div>
