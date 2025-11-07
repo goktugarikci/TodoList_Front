@@ -2,12 +2,14 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { commentService } from '../../services/commentService';
+import { reactionService } from '../../services/reactionService';
 import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
 import { formatMessageTimestamp } from '../../utils/formatDate';
 import { getErrorMessage } from '../../utils/errorHelper';
 import Spinner from '../common/Spinner';
 import { toast } from 'react-hot-toast';
-import type { TaskComment } from '../../types/api';
+import type { TaskComment, ReactionSummary } from '../../types/api';
+import ReactionManager from '../common/ReactionManager';
 
 interface TaskCommentsProps {
   taskId: string;
@@ -26,11 +28,9 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
     queryFn: () => commentService.getComments(taskId),
   });
 
-  // 2. Yorum Ekleme Mutasyonu (Optimistic Update ile)
+  // 2. Yorum Ekleme Mutasyonu (Optimistic)
   const addCommentMutation = useMutation({
     mutationFn: (text: string) => commentService.addComment(taskId, { text }),
-    
-    // Anında güncelleme (Gecikmeyi önler)
     onMutate: async (text) => {
       await queryClient.cancelQueries({ queryKey: ['comments', taskId] });
       const previousComments = queryClient.getQueryData<TaskComment[]>(['comments', taskId]) || [];
@@ -52,25 +52,20 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
       
       return { previousComments, optimisticComment };
     },
-    
-    // Başarılı olursa: Geçici ID'yi gerçek ID ile değiştir
     onSuccess: (realComment, variables, context) => {
       queryClient.setQueryData<TaskComment[]>(['comments', taskId], (oldData) =>
         (oldData || []).map(comment => 
           comment.id === context?.optimisticComment.id ? realComment : comment
         )
       );
-      // Görev kartındaki yorum sayacını güncelle
       queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
     },
-    
-    // Hata olursa: Arayüzü geri al
     onError: (err, variables, context) => {
       toast.error(getErrorMessage(err, 'Yorum eklenemedi.'));
       if (context?.previousComments) {
         queryClient.setQueryData(['comments', taskId], context.previousComments);
       }
-      setNewComment(variables); // Yazdığı metni geri koy
+      setNewComment(variables);
     },
   });
 
@@ -86,6 +81,53 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Yorum silinemedi.')),
   });
+  
+  // 4. Yorum Reaksiyonu Mutasyonu (Optimistic)
+  const toggleCommentReactionMutation = useMutation({
+    mutationFn: (data: { commentId: string, emoji: string }) => 
+      reactionService.toggleCommentReaction(data.commentId, { emoji: data.emoji }),
+    
+    onMutate: async ({ commentId, emoji }) => {
+      await queryClient.cancelQueries({ queryKey: ['comments', taskId] });
+      const previousComments = queryClient.getQueryData<TaskComment[]>(['comments', taskId]);
+
+      if (previousComments) {
+        queryClient.setQueryData<TaskComment[]>(['comments', taskId], 
+          previousComments.map(comment => {
+            if (comment.id !== commentId) return comment;
+            
+            const existingReactionIndex = (comment.reactions || []).findIndex(
+              r => r.emoji === emoji && r.userId === user!.id
+            );
+            
+            let newReactions: ReactionSummary[];
+            if (existingReactionIndex > -1) {
+              newReactions = comment.reactions.filter((r) => !(r.emoji === emoji && r.userId === user!.id));
+            } else {
+              const newReaction: ReactionSummary = {
+                id: `temp-reaction-${Date.now()}`,
+                emoji,
+                userId: user!.id,
+                user: { id: user!.id, name: user!.name }
+              };
+              newReactions = [...(comment.reactions || []), newReaction];
+            }
+            return { ...comment, reactions: newReactions };
+          })
+        );
+      }
+      return { previousComments };
+    },
+    onError: (err, vars, context) => {
+      toast.error(getErrorMessage(err, 'Tepki verilemedi.'));
+      if (context?.previousComments) {
+        queryClient.setQueryData(['comments', taskId], context.previousComments);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', taskId] });
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,10 +136,12 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
     }
   };
 
+  // DÜZELTME (image_82e3d6.png): 'max-h-[60vh]' kaldırıldı
   return (
-    <div className="flex flex-col max-h-[60vh]">
+    <div className="flex flex-col">
       {/* Yorum Listesi */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+      {/* DÜZELTME (image_82e3d6.png): 'overflow-y-auto' kaldırıldı */}
+      <div className="flex-1 space-y-4 pr-2">
         {isLoading && <div className="flex justify-center"><Spinner /></div>}
         
         {!isLoading && (!comments || comments.length === 0) && (
@@ -115,7 +159,6 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
               <div className="bg-zinc-700 rounded-lg px-3 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-zinc-100">{comment.author?.name || 'Bilinmeyen'}</span>
-                  {/* Yorumu silme butonu (Sadece yazan veya admin) */}
                   {(comment.author?.id === user?.id) && (
                     <button 
                       onClick={() => deleteCommentMutation.mutate(comment.id)} 
@@ -128,7 +171,14 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
                 </div>
                 <p className="text-sm text-zinc-200 mt-1">{comment.text}</p>
               </div>
-              <span className="text-xs text-zinc-500 ml-2">{formatMessageTimestamp(comment.createdAt)}</span>
+              <div className="text-xs text-zinc-500 ml-2 mt-1 flex items-center">
+                <span>{formatMessageTimestamp(comment.createdAt)}</span>
+                <ReactionManager
+                  reactions={comment.reactions || []}
+                  currentUserId={user!.id}
+                  onToggleReaction={(emoji) => toggleCommentReactionMutation.mutate({ commentId: comment.id, emoji })}
+                />
+              </div>
             </div>
           </div>
         ))}

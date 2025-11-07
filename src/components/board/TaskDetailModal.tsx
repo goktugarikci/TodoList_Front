@@ -1,21 +1,21 @@
 // goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/board/TaskDetailModal.tsx
 import React, { useState, useEffect, Fragment, useRef } from 'react';
-import type { TaskDetailed, BoardDetailed, UserAssigneeDto, UserPublicInfo, ChecklistItemDetailed, TaskApprovalStatus, TaskAttachment } from '../../types/api';
+import type { TaskDetailed, BoardDetailed, UserAssigneeDto, UserPublicInfo, ChecklistItemDetailed, TaskApprovalStatus, TaskAttachment, ReactionSummary } from '../../types/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query'; 
 import { taskService } from '../../services/taskService';
 import { checklistService } from '../../services/checklistService';
 import { attachmentService } from '../../services/attachmentService';
+import { reactionService } from '../../services/reactionService'; // YENİ
 import { getErrorMessage } from '../../utils/errorHelper';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import { toast } from 'react-hot-toast';
 import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
 import { Menu, Transition } from '@headlessui/react';
-// DÜZELTME: ModalView tipini import et
 import { ModalView } from '../../pages/BoardDetailPage';
 import TaskComments from './TaskComments';
-// YENİ: Zaman Takibi bileşenini import et
 import TaskTimeTracker from './TaskTimeTracker';
+import ReactionManager from '../common/ReactionManager'; // YENİ
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -229,7 +229,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     onError: (err) => toast.error(getErrorMessage(err, 'Alt görev silinemedi.')),
   });
 
-  // === DÜZELTME (Gecikme Sorunu): Alt Göreve Kişi Atama (Optimistic Update) ===
+  // Alt Göreve Kişi Atama (Optimistic Update)
   const assignChecklistItemMutation = useMutation({
     mutationFn: ({ itemId, assignUserId }: { itemId: string, assignUserId: string }) =>
       checklistService.assignToChecklistItem(itemId, { assignUserId }),
@@ -261,7 +261,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     },
   });
 
-  // === DÜZELTME (Gecikme Sorunu): Alt Görevden Kişi Çıkarma (Optimistic Update) ===
+  // Alt Görevden Kişi Çıkarma (Optimistic Update)
   const unassignChecklistItemMutation = useMutation({
     mutationFn: ({ itemId, unassignUserId }: { itemId: string, unassignUserId: string }) =>
       checklistService.unassignFromChecklistItem(itemId, { unassignUserId }),
@@ -326,6 +326,57 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       toast.success('Ek silindi.');
     },
     onError: (err) => toast.error(getErrorMessage(err, "Ek silinemedi.")),
+  });
+  
+  // YENİ: Görev Reaksiyonu Mutasyonu (Optimistic)
+  const toggleTaskReactionMutation = useMutation({
+    mutationFn: (data: { taskId: string, emoji: string }) => 
+      reactionService.toggleTaskReaction(data.taskId, { emoji: data.emoji }),
+    
+    onMutate: async ({ taskId, emoji }) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+
+      if (previousData) {
+        queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], {
+          ...previousData,
+          lists: previousData.lists.map(l => ({
+            ...l,
+            tasks: l.tasks.map(t => {
+              if (t.id !== taskId) return t;
+
+              const existingReactionIndex = (t.reactions || []).findIndex(
+                r => r.emoji === emoji && r.userId === user!.id
+              );
+              
+              let newReactions: ReactionSummary[];
+              if (existingReactionIndex > -1) {
+                newReactions = t.reactions.filter((r) => !(r.emoji === emoji && r.userId === user!.id));
+              } else {
+                const newReaction: ReactionSummary = {
+                  id: `temp-reaction-${Date.now()}`,
+                  emoji,
+                  userId: user!.id,
+                  user: { id: user!.id, name: user!.name }
+                };
+                newReactions = [...(t.reactions || []), newReaction];
+              }
+              return { ...t, reactions: newReactions };
+            })
+          }))
+        });
+      }
+      return { previousData };
+    },
+    onError: (err, vars, context) => {
+      toast.error(getErrorMessage(err, 'Tepki verilemedi.'));
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
+    },
   });
 
   // --- 4. UseEffect'ler (Mutasyonlardan sonra) ---
@@ -393,6 +444,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
               className="w-full h-24 p-2 border border-zinc-700 bg-zinc-900 text-zinc-100 rounded-md focus:outline-none focus:ring-amber-400 focus:border-amber-400"
             />
           </div>
+          {/* YENİ: Görev Reaksiyonları */}
+          <ReactionManager
+            reactions={task.reactions || []}
+            currentUserId={user!.id}
+            onToggleReaction={(emoji) => toggleTaskReactionMutation.mutate({ taskId: task.id, emoji })}
+          />
         </div>
       )
     },
@@ -472,7 +529,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
         <div className="space-y-2">
           <h4 className="text-lg font-semibold text-zinc-100">Ekler</h4>
           <div className="flex flex-wrap gap-2">
-            {/* DÜZELTME (image_dc4028.png): (task.attachments || []) eklendi */}
             {(task.attachments || []).map(att => (
               <AttachmentItem 
                 key={att.id} 
@@ -514,6 +570,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       component: (
          <div className="space-y-2">
           <h4 className="text-lg font-semibold text-zinc-100">Alt Görevler</h4>
+          {/* DÜZELTME (image_82e3d6.png): Kaydırma ve yükseklik buraya (içeriğe) eklendi */}
           <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-2">
             {(task.checklistItems || []).map(item => {
               const itemAssigneeIds = new Set((item.assignees || []).map(a => a.id));
@@ -552,8 +609,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                       </Menu.Button>
                       <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100">
                         <Menu.Items className="absolute right-0 bottom-full mb-1 w-48 max-h-48 overflow-y-auto rounded-md bg-zinc-900 border border-zinc-700 shadow-lg z-20">
-                          {unassignedChecklistMembers.length > 0 ? (
-                            unassignedChecklistMembers.map(member => (
+                          {unassignedBoardMembers.length > 0 ? (
+                            unassignedBoardMembers.map(member => (
                               <Menu.Item key={member.user.id}>
                                 {({ active }) => (
                                   <button
@@ -606,14 +663,17 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       title: 'Yorumlar',
       size: 'lg',
       component: (
-        <TaskComments 
-          taskId={task!.id} 
-          taskTitle={task!.title} 
-          boardId={boardId!}
-        />
+        // DÜZELTME (image_82e3d6.png): Kaydırma ve yükseklik buraya (dış sarmalayıcıya) eklendi
+        <div className="max-h-[60vh] overflow-y-auto pr-1">
+          <TaskComments 
+            taskId={task!.id} 
+            taskTitle={task!.title} 
+            boardId={boardId!}
+          />
+        </div>
       )
     },
-    // 6. YENİ: Zaman Takibi
+    // 6. Zaman Takibi
     time: {
       title: 'Zaman Takibi',
       size: 'lg',

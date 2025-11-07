@@ -196,8 +196,8 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, boardId }) =>
   const updateEntryMutation = useMutation({
     mutationFn: ({ entryId, data }: { entryId: string, data: UpdateManualTimeEntryRequest }) =>
       timeEntryService.updateTimeEntry(entryId, data),
+    // DÜZELTME (image_818dc8.png): 'onSuccess' ve 'onError' callback'leri mutasyonun içinde olmalı
     ...mutationCallbacks,
-    // DÜZELTME (image_818dc8.png): 'onSuccess' callback'i mutasyonun içinde olmalı
     onSuccess: (updatedEntry) => {
       queryClient.setQueryData<PaginatedTaskTimeEntries>(['timeEntries', taskId], (old) => {
         if (!old) return old;
@@ -210,10 +210,10 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, boardId }) =>
   
   // 3. Handler'lar
   const handleToggleTimer = () => {
-    // DÜZELTME (image_771dd2.png): 'mutate' fonksiyonları parametresiz veya doğru parametre ile çağrılmalı
+    // DÜZELTME (image_771dd2.png, image_81a864.png): 'mutate' fonksiyonları parametresiz veya doğru parametre ile çağrılmalı
     // 1. Çalışan bir İLERİ sayacı durdur
     if (runningStopwatch) {
-      stopTimerMutation.mutate(); // Argüman opsiyonel olduğu için 'undefined' göndermeye gerek yok
+      stopTimerMutation.mutate(undefined); // Argüman opsiyonel olduğu için 'undefined' göndermeye gerek yok
       return;
     }
     
@@ -238,7 +238,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, boardId }) =>
       setCountdownMinutes(duration);
     } else {
       // İleri Sayım (Stopwatch) Başlat
-      startTimerMutation.mutate();
+      startTimerMutation.mutate(undefined);
     }
   };
   

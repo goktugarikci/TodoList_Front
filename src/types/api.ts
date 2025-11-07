@@ -65,6 +65,7 @@ export interface TaskCounts {
 }
 
 export interface ReactionSummary {
+  id: string; // Reaksiyonun kendi ID'si
   emoji: string;
   userId: string;
   user: { // Reaksiyonu verenin temel bilgisi
@@ -208,10 +209,9 @@ export interface TaskDetailed {
   assignees: UserAssigneeDto[];
   tags: Tag[];
   checklistItems: ChecklistItemDetailed[];
-  
-  attachments: TaskAttachment[]; // GÜNCELLENDİ: Ekler buraya eklendi
+  attachments: TaskAttachment[]; 
+  reactions: ReactionSummary[];
   _count: TaskCounts;
-  // DÜZELTME: API'den gelen yanıta boardId eklenmesi
   taskListId: string;
   taskList: {
     boardId: string;
@@ -320,6 +320,7 @@ export interface ReactionGroupResponse {
   reactions: {
     emoji: string;
     count: number;
+    users: { id: string; name: string }[];
   }[];
 }
 
