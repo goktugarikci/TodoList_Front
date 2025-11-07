@@ -11,8 +11,11 @@ import Spinner from '../common/Spinner';
 import { toast } from 'react-hot-toast';
 import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
 import { Menu, Transition } from '@headlessui/react';
-// ModalView tipini import et
+// DÜZELTME: ModalView tipini import et
 import { ModalView } from '../../pages/BoardDetailPage';
+import TaskComments from './TaskComments';
+// YENİ: Zaman Takibi bileşenini import et
+import TaskTimeTracker from './TaskTimeTracker';
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -92,6 +95,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   };
 
   // --- 3. Mutasyonlar (Tümü en üstte tanımlanmalı) ---
+  
   const deleteTaskMutation = useMutation({
     mutationFn: () => taskService.deleteTask(task!.id),
     onSuccess: () => {
@@ -123,30 +127,63 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     onError: (err) => toast.error(getErrorMessage(err, 'Görev güncellenemedi.')),
   });
 
+  // === DÜZELTME (Gecikme Sorunu): Kişi Atama (Optimistic Update) ===
   const assignTaskMutation = useMutation({
     mutationFn: (assignUserId: string) => taskService.assignTask(task!.id, { assignUserId }),
-    onSuccess: (updatedTask) => {
-      if (!boardId) return;
-      queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
-        if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({ ...list, tasks: list.tasks.map(t => (t.id === updatedTask.id ? { ...t, assignees: updatedTask.assignees } : t)) }));
-        return { ...oldData, lists: newListData };
-      });
+    onMutate: async (assignUserId) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+      if (previousData && board) {
+        const userToAssign = board.members.find(m => m.user.id === assignUserId)?.user;
+        if (userToAssign) {
+          queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], {
+            ...previousData,
+            lists: previousData.lists.map(l => ({
+              ...l,
+              tasks: l.tasks.map(t => (t.id === task!.id ? { ...t, assignees: [...t.assignees, userToAssign] } : t))
+            }))
+          });
+        }
+      }
+      return { previousData };
     },
-    onError: (err) => toast.error(getErrorMessage(err, 'Kullanıcı atanamadı.')),
+    onError: (err, variables, context) => {
+      toast.error(getErrorMessage(err, 'Kullanıcı atanamadı.'));
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
+    },
   });
 
+  // === DÜZELTME (Gecikme Sorunu): Kişi Çıkarma (Optimistic Update) ===
   const unassignTaskMutation = useMutation({
     mutationFn: (unassignUserId: string) => taskService.unassignTask(task!.id, { unassignUserId }),
-    onSuccess: (updatedTask) => {
-      if (!boardId) return;
-      queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
-        if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({ ...list, tasks: list.tasks.map(t => (t.id === updatedTask.id ? { ...t, assignees: updatedTask.assignees } : t)) }));
-        return { ...oldData, lists: newListData };
-      });
+    onMutate: async (unassignUserId) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+      if (previousData) {
+        queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], {
+          ...previousData,
+          lists: previousData.lists.map(l => ({
+            ...l,
+            tasks: l.tasks.map(t => (t.id === task!.id ? { ...t, assignees: t.assignees.filter(a => a.id !== unassignUserId) } : t))
+          }))
+        });
+      }
+      return { previousData };
     },
-     onError: (err) => toast.error(getErrorMessage(err, 'Atama kaldırılamadı.')),
+    onError: (err, variables, context) => {
+      toast.error(getErrorMessage(err, 'Atama kaldırılamadı.'));
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
+    },
   });
 
   const createChecklistItemMutation = useMutation({
@@ -192,24 +229,65 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     onError: (err) => toast.error(getErrorMessage(err, 'Alt görev silinemedi.')),
   });
 
+  // === DÜZELTME (Gecikme Sorunu): Alt Göreve Kişi Atama (Optimistic Update) ===
   const assignChecklistItemMutation = useMutation({
     mutationFn: ({ itemId, assignUserId }: { itemId: string, assignUserId: string }) =>
       checklistService.assignToChecklistItem(itemId, { assignUserId }),
-    onSuccess: (updatedItem) => {
-      updateChecklistItemInCache(updatedItem);
-      toast.success('Alt göreve atandı.');
+    onMutate: async ({ itemId, assignUserId }) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+      if (previousData && board) {
+        const userToAssign = board.members.find(m => m.user.id === assignUserId)?.user;
+        if (userToAssign) {
+          const newChecklistItem = previousData.lists
+            .flatMap(l => l.tasks)
+            .find(t => t.id === task!.id)
+            ?.checklistItems.find(item => item.id === itemId);
+          if (newChecklistItem) {
+            updateChecklistItemInCache({ ...newChecklistItem, assignees: [...newChecklistItem.assignees, userToAssign] });
+          }
+        }
+      }
+      return { previousData };
     },
-    onError: (err) => toast.error(getErrorMessage(err, 'Atama yapılamadı.')),
+    onError: (err, variables, context) => {
+      toast.error(getErrorMessage(err, 'Atama yapılamadı.'));
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
+    },
   });
 
+  // === DÜZELTME (Gecikme Sorunu): Alt Görevden Kişi Çıkarma (Optimistic Update) ===
   const unassignChecklistItemMutation = useMutation({
     mutationFn: ({ itemId, unassignUserId }: { itemId: string, unassignUserId: string }) =>
       checklistService.unassignFromChecklistItem(itemId, { unassignUserId }),
-    onSuccess: (updatedItem) => {
-      updateChecklistItemInCache(updatedItem);
-      toast.success('Atama kaldırıldı.');
+    onMutate: async ({ itemId, unassignUserId }) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+      if (previousData) {
+         const newChecklistItem = previousData.lists
+            .flatMap(l => l.tasks)
+            .find(t => t.id === task!.id)
+            ?.checklistItems.find(item => item.id === itemId);
+         if (newChecklistItem) {
+            updateChecklistItemInCache({ ...newChecklistItem, assignees: newChecklistItem.assignees.filter(a => a.id !== unassignUserId) });
+         }
+      }
+      return { previousData };
     },
-    onError: (err) => toast.error(getErrorMessage(err, 'Atama kaldırılamadı.')),
+    onError: (err, variables, context) => {
+      toast.error(getErrorMessage(err, 'Atama kaldırılamadı.'));
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
+    },
   });
 
   const uploadAttachmentMutation = useMutation({
@@ -239,6 +317,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
           ...list,
           tasks: list.tasks.map(t => (t.id === task!.id ? {
             ...t,
+            // DÜZELTME (image_dc4028.png): 'attachments' undefined olabilir
             attachments: (t.attachments || []).filter(att => att.id !== attachmentId)
           } : t))
         }));
@@ -257,7 +336,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     }
   }, [task]);
   
-  // DÜZELTME: Scroll (kaydırma) useEffect'i kaldırıldı.
+  // DÜZELTME (image_fb25fe.png): Hatalı scroll useEffect'i kaldırıldı.
 
   // --- 5. Erken Çıkış (Tüm Hook'lardan sonra) ---
   if (!task || !board) {
@@ -290,7 +369,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const unassignedBoardMembers = board.members.filter(m => !taskAssigneeIds.has(m.user.id));
 
   // === ARAYÜZ (VIEW) YÖNETİMİ ===
-  // Hangi başlığın ve hangi arayüzün gösterileceğini belirler
   const modalConfig = {
     // 1. Görevi Düzenle (Başlık/Açıklama)
     details: {
@@ -323,12 +401,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       title: 'Kişi Ata / Yönet',
       size: 'md',
       component: (
-        // DÜZELTME: "Eylemler" bölümü kaldırıldı
-        <div className="flex flex-col space-y-4">
+        <div className="flex flex-col space-y-4 max-h-[60vh] overflow-y-auto">
           {/* Atananlar Listesi */}
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-2">Atananlar</label>
-            <div className="p-2 bg-zinc-900 rounded-md max-h-40 overflow-y-auto space-y-1">
+            <div className="p-2 bg-zinc-900 rounded-md min-h-[4rem]">
               {(task.assignees || []).length > 0 ? (
                 (task.assignees || []).map(assignee => (
                   <div key={assignee.id} className="flex items-center justify-between group p-1.5 rounded-md hover:bg-zinc-700">
@@ -343,9 +420,9 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                     <button 
                       onClick={() => unassignTaskMutation.mutate(assignee.id)}
                       disabled={unassignTaskMutation.isPending}
-                      className="p-1 text-zinc-500 hover:text-red-500 opacity-0 group-hover:opacity-100"
+                      className="p-1 text-zinc-500 hover:text-red-500 opacity-0 group-hover:opacity-100 disabled:opacity-50"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                      {unassignTaskMutation.isPending && unassignTaskMutation.variables === assignee.id ? <Spinner size="sm" /> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>}
                     </button>
                   </div>
                 ))
@@ -358,7 +435,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
           {/* Pano Üyeleri Listesi */}
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-2">Panodaki Diğer Üyeler</label>
-             <div className="p-2 bg-zinc-900 rounded-md max-h-40 overflow-y-auto space-y-1">
+             <div className="p-2 bg-zinc-900 rounded-md max-h-48 overflow-y-auto">
                 {unassignedBoardMembers.length > 0 ? (
                   unassignedBoardMembers.map(member => (
                     <div key={member.user.id} className="flex items-center justify-between group p-1.5 rounded-md hover:bg-zinc-700">
@@ -373,9 +450,9 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                       <button 
                         onClick={() => assignTaskMutation.mutate(member.user.id)}
                         disabled={assignTaskMutation.isPending}
-                        className="p-1 text-zinc-500 hover:text-green-500 opacity-0 group-hover:opacity-100"
+                        className="p-1 text-zinc-500 hover:text-green-500 opacity-0 group-hover:opacity-100 disabled:opacity-50"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                        {assignTaskMutation.isPending && assignTaskMutation.variables === member.user.id ? <Spinner size="sm" /> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>}
                       </button>
                     </div>
                   ))
@@ -395,6 +472,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
         <div className="space-y-2">
           <h4 className="text-lg font-semibold text-zinc-100">Ekler</h4>
           <div className="flex flex-wrap gap-2">
+            {/* DÜZELTME (image_dc4028.png): (task.attachments || []) eklendi */}
             {(task.attachments || []).map(att => (
               <AttachmentItem 
                 key={att.id} 
@@ -515,6 +593,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
               placeholder="Yeni alt görev ekle..."
               className="flex-1 px-3 py-2 border border-zinc-700 bg-zinc-900 text-zinc-100 rounded-md"
             />
+            {/* DÜZELTME: Yazım hatası (image_05fc3f.png) */}
             <button type="submit" disabled={createChecklistItemMutation.isPending} className="px-3 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600">
               {createChecklistItemMutation.isPending ? <Spinner size="sm" /> : 'Ekle'}
             </button>
@@ -522,6 +601,29 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
         </div>
       )
     },
+    // 5. Yorumlar
+    comments: {
+      title: 'Yorumlar',
+      size: 'lg',
+      component: (
+        <TaskComments 
+          taskId={task!.id} 
+          taskTitle={task!.title} 
+          boardId={boardId!}
+        />
+      )
+    },
+    // 6. YENİ: Zaman Takibi
+    time: {
+      title: 'Zaman Takibi',
+      size: 'lg',
+      component: (
+        <TaskTimeTracker 
+          taskId={task!.id}
+          boardId={boardId!}
+        />
+      )
+    }
   };
 
   // Aktif görünümü ve başlığı seç

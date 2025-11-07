@@ -208,6 +208,7 @@ export interface TaskDetailed {
   assignees: UserAssigneeDto[];
   tags: Tag[];
   checklistItems: ChecklistItemDetailed[];
+  
   attachments: TaskAttachment[]; // GÜNCELLENDİ: Ekler buraya eklendi
   _count: TaskCounts;
   // DÜZELTME: API'den gelen yanıta boardId eklenmesi
@@ -218,6 +219,7 @@ export interface TaskDetailed {
 }
 
 export interface ChecklistItemDetailed {
+  taskId: string;
   id: string;
   text: string;
   isCompleted: boolean;
@@ -347,7 +349,6 @@ export interface CreateManualTimeEntryRequest {
 export interface StopTimeEntryRequest {
   notes?: string;
 }
-
 export interface TimeEntry {
   id: string;
   startTime: string;
@@ -555,6 +556,17 @@ export interface BulkMessageRequest {
   target: 'all' | string[]; // 'all' veya boardId dizisi
 }
 
+export interface ChangeUserRoleRequest {
+  role: UserRole; // "USER" | "ADMIN"
+}
+
+export interface SetUserStatusRequest {
+  isActive: boolean;
+}
+
+export interface TransferOwnershipRequest {
+  newOwnerUserId: string;
+}
 // ===================================================================
 // 15. VIEW & REPORT ENDPOINT TİPLERİ
 // (Tamamlanmış hali)
@@ -680,4 +692,21 @@ export interface FriendRequest {
 export interface CreateTaskListRequest {
   title: string;
   boardId: string;
+}
+export interface UpdateManualTimeEntryRequest {
+  durationInMinutes?: number;
+  date?: string; // YYYY-MM-DD
+  notes?: string | null;
+}
+export interface PaginatedTaskTimeEntries {
+  entries: TimeEntryWithUser[];
+  totalEntries: number;
+  currentPage: number;
+  totalPages: number;
+}
+export interface PaginatedUserTimeEntries {
+  entries: TimeEntryWithTask[];
+  totalEntries: number;
+  currentPage: number;
+  totalPages: number;
 }

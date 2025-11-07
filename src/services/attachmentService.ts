@@ -1,7 +1,7 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/services/attachmentService.ts
 import axiosClient from '../api/axiosClient';
-// Hata: 'fro' 'from' olarak düzeltildi
+// DÜZELTME: 'fro' -> 'from'
 import { getErrorMessage } from '../utils/errorHelper'; 
-// Hata: 'TaskDetailed' bu dosyada kullanılmıyor, bu yüzden import etmeye gerek yok
 import type { TaskAttachment } from '../types/api'; 
 
 /**

@@ -1,17 +1,18 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/pages/BoardPage.tsx
 import React, { useState } from 'react';
-// API_SOCKET_URL, resim linklerini (http://localhost:5000) çözmek için import edildi
 import { useAuth, API_SOCKET_URL } from '../contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { boardService } from '../services/boardService';
 import { getErrorMessage } from '../utils/errorHelper';
-import UserSettingsModal from '../components/settings/UserSettingsModal';
-import FriendsPanel from '../components/friends/FriendsPanel';
+// GÜNCELLENDİ: useLayout import edildi
+import { useLayout } from '../components/layout/ProtectedLayout';
 import Spinner from '../components/common/Spinner';
 import { useNavigate } from 'react-router-dom';
 import type { BoardSummary, CreateBoardRequest, BoardRole } from '../types/api';
 import Modal from '../components/common/Modal';
+// YENİ: Bildirim zili eklendi
+import NotificationBell from '../components/layout/NotificationBell';
 
-// Backend'in (board.controller.js) /myboards için döndüğü GÜNCEL veri tipi
 interface UserBoardSummary extends Omit<BoardSummary, '_count' | 'createdAt'> {
   membership: {
     role: BoardRole;
@@ -25,21 +26,20 @@ const BoardPage: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // GÜNCELLENDİ: Layout hook'ları alındı
+  const { openSettings, openFriends } = useLayout();
 
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  // State'ler (Artık layout'ta değiller)
   const [isNewBoardModalOpen, setIsNewBoardModalOpen] = useState(false);
-  const [isFriendsPanelOpen, setIsFriendsPanelOpen] = useState(false);
   const [newBoardName, setNewBoardName] = useState('');
   const [newBoardType, setNewBoardType] = useState<'INDIVIDUAL' | 'GROUP'>('GROUP');
 
-  // --- Veri Çekme (react-query) ---
   const { data: userBoards, isLoading: isLoadingBoards, error: boardsError } = useQuery<UserBoardSummary[]>({
     queryKey: ['userBoards', user?.id],
     queryFn: () => boardService.getMyBoards() as Promise<UserBoardSummary[]>,
     enabled: !!user?.id,
   });
 
-  // --- Veri Güncelleme (react-query) ---
   const createBoardMutation = useMutation({
     mutationFn: (data: CreateBoardRequest) => boardService.createBoard(data),
     onSuccess: (newBoard) => {
@@ -67,32 +67,24 @@ const BoardPage: React.FC = () => {
 
   return (
     <>
-      {/* ANA GÜNCELLEME: 
-        Arka plan 'bg-dotted-pattern' (Siyah + Sarı Noktalar)
-        Varsayılan metin rengi 'text-zinc-100' (Beyaz/Açık Gri)
-      */}
       <div className="min-h-screen bg-dotted-pattern text-zinc-100 p-8">
         
-        {/* Header: 'bg-zinc-800' (Koyu Gri Panel Rengi) */}
+        {/* Header: Bu sayfada kalıyor */}
         <header className="flex justify-between items-center mb-10 bg-zinc-800 p-4 rounded-lg shadow-lg border border-zinc-700">
           
-          {/* Başlık (Görünür Metin Rengi) */}
           <h1 className="text-3xl font-bold text-zinc-100 flex items-center">
             {user?.avatarUrl && (
               <img
-                src={`${API_SOCKET_URL}${user.avatarUrl}`} // Backend URL
+                src={`${API_SOCKET_URL}${user.avatarUrl}`} 
                 alt="Profil"
-                className="w-12 h-12 rounded-full object-cover mr-4 border-2 border-amber-400" // Sarı border
+                className="w-12 h-12 rounded-full object-cover mr-4 border-2 border-amber-400"
               />
             )}
-            {/* Yazı rengi 'text-zinc-100' (Beyaz) */}
             Merhaba, {user?.name}!
           </h1>
           
-          {/* BUTON GÜNCELLEMELERİ (İsteğinize göre renkli) */}
+          {/* GÜNCELLENDİ: Bildirim Zili buraya eklendi */}
           <div className="flex items-center space-x-2">
-            
-            {/* "Yeni Pano" Butonu (Yeşil - bg-green-600) */}
             <button
               onClick={() => setIsNewBoardModalOpen(true)}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center"
@@ -102,9 +94,11 @@ const BoardPage: React.FC = () => {
               <span className="hidden sm:inline ml-2">Yeni Pano</span>
             </button>
             
-            {/* "Arkadaşlar" Butonu (Sarı - bg-amber-400) */}
+            {/* YENİ: Bildirim Zili */}
+            <NotificationBell />
+            
             <button
-              onClick={() => setIsFriendsPanelOpen(true)}
+              onClick={openFriends} // useLayout hook'undan
               className="px-4 py-2 bg-amber-400 text-zinc-900 font-semibold rounded-md hover:bg-amber-500 transition-colors flex items-center"
               title="Arkadaşlar ve Sohbet"
             >
@@ -112,9 +106,8 @@ const BoardPage: React.FC = () => {
               <span className="hidden sm:inline ml-2">Arkadaşlar</span>
             </button>
             
-            {/* "Ayarlar" Butonu (Mavi - bg-blue-600) */}
             <button
-              onClick={() => setIsSettingsModalOpen(true)}
+              onClick={openSettings} // useLayout hook'undan
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center"
               title="Ayarlar"
             >
@@ -122,7 +115,6 @@ const BoardPage: React.FC = () => {
               <span className="hidden sm:inline ml-2">Ayarlar</span>
             </button>
             
-            {/* "Çıkış Yap" Butonu (Kırmızı - bg-red-600) */}
             <button
               onClick={logout}
               className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center"
@@ -136,7 +128,6 @@ const BoardPage: React.FC = () => {
         
         <main className="container mx-auto">
           <section className="mb-10">
-            {/* METİN RENGİ GÜNCELLEMESİ (text-zinc-100) */}
             <h2 className="text-3xl font-semibold text-zinc-100 mb-6">Panolarınız</h2>
             
             {isLoadingBoards && (
@@ -149,14 +140,12 @@ const BoardPage: React.FC = () => {
               </p>
             )}
 
-            {/* Pano Kartları (Koyu Tema) */}
             {userBoards && userBoards.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 
                 {userBoards.map(board => (
                   <div 
                     key={board.id} 
-                    // Pano Kartları (Koyu Gri) ve Sarı Vurgu
                     className="bg-zinc-800 p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-amber-400"
                     onClick={() => handleGoToBoard(board.id)}
                   >
@@ -179,12 +168,9 @@ const BoardPage: React.FC = () => {
               </div>
             )}
 
-            {/* Pano Yoksa (Koyu Tema) */}
             {userBoards && userBoards.length === 0 && (
               <div className="bg-zinc-800 p-8 rounded-lg shadow-lg text-center">
-                {/* METİN RENGİ GÜNCELLEMESİ (text-zinc-400) */}
                 <p className="text-zinc-400 text-lg mb-4">Henüz hiçbir panonun üyesi değilsiniz.</p>
-                {/* BUTON GÜNCELLEMESİ (bg-amber-400) */}
                 <button
                   onClick={() => setIsNewBoardModalOpen(true)}
                   className="px-6 py-3 bg-amber-400 text-zinc-900 text-lg font-bold rounded-md hover:bg-amber-500 transition-colors"
@@ -197,19 +183,7 @@ const BoardPage: React.FC = () => {
         </main>
       </div>
       
-      {/* Ayarlar Paneli (Koyu tema için güncellenmiş SlideOverPanel'i kullanır) */}
-      <UserSettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-      />
-      
-      {/* Arkadaşlar Paneli (Koyu tema için güncellenmiş SlideOverPanel'i kullanır) */}
-      <FriendsPanel
-        isOpen={isFriendsPanelOpen}
-        onClose={() => setIsFriendsPanelOpen(false)}
-      />
-
-      {/* Yeni Pano Oluşturma Modal'ı (Koyu tema için güncellenmiş Modal'ı kullanır) */}
+      {/* Modallar (Layout'ta değiller, bu sayfada kalıyorlar) */}
       <Modal
         isOpen={isNewBoardModalOpen}
         onClose={() => setIsNewBoardModalOpen(false)}

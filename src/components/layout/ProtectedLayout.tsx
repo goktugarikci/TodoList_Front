@@ -1,3 +1,4 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/layout/ProtectedLayout.tsx
 import React, { useState, createContext, useContext, ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -5,13 +6,14 @@ import Spinner from '../common/Spinner';
 
 import UserSettingsModal from '../../components/settings/UserSettingsModal';
 import FriendsPanel from '../../components/friends/FriendsPanel';
+
 // Panelleri açmak için bir context
 interface LayoutContextType {
   openSettings: () => void;
   openFriends: () => void;
 }
 const LayoutContext = createContext<LayoutContextType | null>(null);
-// Bu hook'u (useLayout) diğer bileşenlerde (örn: BoardDetailPage) kullanacağız
+
 export const useLayout = () => useContext(LayoutContext)!;
 
 /**
@@ -21,7 +23,6 @@ export const useLayout = () => useContext(LayoutContext)!;
 export const ProtectedLayout: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // YENİ: Panel state'leri
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isFriendsPanelOpen, setIsFriendsPanelOpen] = useState(false);
 
@@ -48,10 +49,7 @@ export const ProtectedLayout: React.FC = () => {
         {/* Rota içeriği (BoardPage veya BoardDetailPage) buraya gelir */}
         <Outlet /> 
         
-        {/* --- YENİ: PANELLER BURADA RENDER EDİLİR --- */}
-        {/* Bu paneller artık 'useLayout' hook'u aracılığıyla
-            herhangi bir alt bileşenden (Header, Menü vb.) açılabilir. */}
-        
+        {/* Paneller burada render edilir */}
         <UserSettingsModal
           isOpen={isSettingsModalOpen}
           onClose={() => setIsSettingsModalOpen(false)}
@@ -61,7 +59,6 @@ export const ProtectedLayout: React.FC = () => {
           isOpen={isFriendsPanelOpen}
           onClose={() => setIsFriendsPanelOpen(false)}
         />
-        {/* --- BİTİŞ --- */}
       </div>
     </LayoutContext.Provider>
   );
