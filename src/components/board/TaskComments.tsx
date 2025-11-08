@@ -12,6 +12,7 @@ import { toast } from 'react-hot-toast';
 import type { TaskComment, ReactionSummary } from '../../types/api';
 import ReactionManager from '../common/ReactionManager';
 import { Menu, Transition } from '@headlessui/react'; // Silme menüsü için
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface TaskCommentsProps {
   taskId: string;
@@ -176,7 +177,7 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
           <div key={comment.id} className="flex items-start space-x-3 group">
             <img
               className="w-8 h-8 rounded-full object-cover"
-              src={comment.author?.avatarUrl ? `${API_SOCKET_URL}${comment.author.avatarUrl}` : `https://ui-avatars.com/api/?name=${comment.author?.name || '?'}`}
+              src={getAvatarUrl(comment.author?.avatarUrl)}
               alt={comment.author?.name || 'Bilinmeyen'}
             />
             <div className="flex-1">
@@ -250,7 +251,7 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
       <form onSubmit={handleSubmit} className="flex items-start space-x-3 pt-4 mt-4 border-t border-zinc-700">
         <img
           className="w-8 h-8 rounded-full object-cover"
-          src={user?.avatarUrl ? `${API_SOCKET_URL}${user.avatarUrl}` : `https://ui-avatars.com/api/?name=${user?.name || '?'}`}
+          src={getAvatarUrl(user?.avatarUrl)}
           alt="Siz"
         />
         <textarea

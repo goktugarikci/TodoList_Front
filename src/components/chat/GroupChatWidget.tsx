@@ -1,15 +1,15 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/chat/GroupChatWidget.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatService } from '../../services/chatService';
 import { formatMessageTimestamp } from '../../utils/formatDate';
 import Spinner from '../common/Spinner';
 import type { MessageWithAuthor } from '../../types/api';
-// YENİ: Emoji Kütüphanesi
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react'; 
-// YENİ: Bildirim yardımcıları
 import { playNotificationSound, requestNotificationPermission } from '../../utils/notificationHelpers';
-import { toast } from 'react-hot-toast'; // Pop-up için
+import { toast } from 'react-hot-toast'; 
+import { getAvatarUrl } from '../../utils/getAvatarUrl'; // Avatar URL yardımcısı
 
 interface GroupChatWidgetProps {
   boardId: string;
@@ -21,10 +21,10 @@ const GroupChatWidget: React.FC<GroupChatWidgetProps> = ({ boardId, boardName })
   const queryClient = useQueryClient();
   const [messageText, setMessageText] = useState('');
   const [isMinimized, setIsMinimized] = useState(true);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false); // Emoji penceresi durumu
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false); 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Veri Çekme: (Limit kaldırıldığı için tüm mesajlar gelir)
+  // 1. Veri Çekme
   const { data: messages = [], isLoading } = useQuery<MessageWithAuthor[]>({
     queryKey: ['groupMessages', boardId],
     queryFn: () => chatService.getGroupMessages(boardId),
@@ -32,7 +32,7 @@ const GroupChatWidget: React.FC<GroupChatWidgetProps> = ({ boardId, boardName })
     staleTime: 1000 * 60 * 5,
   });
 
-  // 2. Socket.io Dinleyicileri (Katılma ve Yeni Mesaj Alma)
+  // 2. Socket.io Dinleyicileri
   useEffect(() => {
     if (!socket || !boardId || !user) return;
 
@@ -48,35 +48,68 @@ const GroupChatWidget: React.FC<GroupChatWidgetProps> = ({ boardId, boardName })
           }
         );
 
-        // --- YENİ: BİLDİRİM MANTIĞI ---
         const isMeSender = newMessage.author?.id === user.id;
 
-        // 1. Gönderen biz değilsek
         if (!isMeSender) {
-          // 2. Pencere küçültülmüşse (yarı görünür) VEYA tarayıcı sekmesi aktif değilse
           if (isMinimized || document.hidden) {
             playNotificationSound();
             requestNotificationPermission(
-              `${newMessage.author?.name || 'Biri'} (@${boardName})`, // Başlık
-              newMessage.text // İçerik
+              `${newMessage.author?.name || 'Biri'} (@${boardName})`, 
+              newMessage.text 
             );
             
-            // Pop-up (Açık ama odakta değilse)
+            // DÜZELTME: "Yanıtla" butonlu Pop-up (ChatContext'ten kopyalandı)
             if (!isMinimized && document.hidden) {
                toast.custom((t) => (
                 <div
                   className="max-w-md w-full bg-zinc-800 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5 border border-zinc-700"
                 >
-                  {/* ... (Pop-up içeriği - ChatContext'teki gibi) ... */}
+                  <button
+                      onClick={() => toast.dismiss(t.id)}
+                      className="absolute top-1 right-1 text-zinc-500 hover:text-zinc-300 z-10"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </button>
+                  <div className="flex-1 w-0 p-4">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 pt-0.5">
+                        <img
+                          className="h-10 w-10 rounded-full"
+                          src={getAvatarUrl(newMessage.author?.avatarUrl, newMessage.author?.name)}
+                          alt={newMessage.author?.name}
+                        />
+                      </div>
+                      <div className="ml-3 flex-1 min-w-0">
+                        <p className="text-sm font-medium text-zinc-100 truncate">
+                          {newMessage.author?.name}
+                          <span className="ml-2 text-xs text-zinc-400 font-normal">
+                            @{newMessage.author?.username || '...'}
+                          </span>
+                        </p>
+                        <p className="mt-1 text-sm text-zinc-400 truncate">{newMessage.text}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Yanıtla Butonu */}
+                  <div className="flex border-l border-zinc-700">
+                    <button
+                      onClick={() => {
+                        // Grubu aç (minimize ise)
+                        setIsMinimized(false); 
+                        toast.dismiss(t.id);
+                      }}
+                      className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-amber-400 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      Yanıtla
+                    </button>
+                  </div>
                 </div>
-              ));
+              ), { duration: 5000 });
             }
           } else {
-            // Pencere açıksa ve odaktaysa sadece sesi çal
             playNotificationSound();
           }
         }
-        // --- BİTİŞ: BİLDİRİM MANTIĞI ---
       }
     };
     
@@ -85,7 +118,7 @@ const GroupChatWidget: React.FC<GroupChatWidgetProps> = ({ boardId, boardName })
     return () => {
       socket.off('receive_message', handleReceiveMessage);
     };
-  }, [socket, boardId, queryClient, user, isMinimized]); // 'isMinimized' eklendi
+  }, [socket, boardId, queryClient, user, isMinimized, boardName]); 
 
   // 3. Yeni mesaj geldiğinde en alta kaydır
   useEffect(() => {
@@ -127,7 +160,6 @@ const GroupChatWidget: React.FC<GroupChatWidgetProps> = ({ boardId, boardName })
     return (
       <button
         onClick={() => setIsMinimized(false)}
-        // Bireysel DM (right-4) ile çakışmasın diye sağdan daha uzağa
         className="fixed bottom-0 right-24 z-40 px-4 py-3 bg-zinc-800 shadow-lg rounded-t-lg border-t border-x border-zinc-700 hover:bg-zinc-700"
         title="Grup Sohbetini Aç"
       >
@@ -136,7 +168,7 @@ const GroupChatWidget: React.FC<GroupChatWidgetProps> = ({ boardId, boardName })
     );
   }
 
-  // Tam pencere modu (GÜNCELLENDİ: Boyut büyütüldü w-96 h-[500px])
+  // Tam pencere modu
   return (
     <div className="fixed bottom-4 right-4 z-50 w-96 h-[500px] bg-zinc-800 shadow-2xl rounded-lg border border-zinc-700 flex flex-col">
       {/* Başlık (Tıklanınca küçültür) */}
@@ -172,10 +204,10 @@ const GroupChatWidget: React.FC<GroupChatWidgetProps> = ({ boardId, boardName })
         <div className="emoji-picker-container absolute bottom-16 right-0 z-10">
           <EmojiPicker
             onEmojiClick={onEmojiClick}
-            theme={Theme.DARK} // Koyu tema
+            theme={Theme.DARK} 
             lazyLoadEmojis={true}
             height={350}
-            width={310} // Boyut ayarlandı
+            width={310} 
           />
         </div>
       )}
@@ -207,21 +239,18 @@ const GroupMessageItem: React.FC<{ message: MessageWithAuthor }> = ({ message })
     <div className="flex items-start">
       <img
         className="h-8 w-8 rounded-full object-cover mr-3 flex-shrink-0"
-        src={message.author?.avatarUrl ? `${API_SOCKET_URL}${message.author.avatarUrl}` : `https://ui-avatars.com/api/?name=${message.author?.name || '?'}`}
+        src={getAvatarUrl(message.author?.avatarUrl, message.author?.name || '?')}
         alt={message.author?.name}
       />
       <div className="flex-1 min-w-0">
         <p className="text-sm">
-          {/* @kullanıcıadı (veya isim) */}
           <span className="font-semibold text-amber-400 mr-2">
             @{message.author?.username || message.author?.name || 'Bilinmeyen'}
           </span>
-          {/* Mesaj içeriği */}
           <span className="text-zinc-100" style={{ wordBreak: 'break-word' }}>
             {message.text}
           </span>
         </p>
-        {/* Zaman Damgası */}
         <p className="text-xs text-zinc-500 mt-0.5">
           {formatMessageTimestamp(message.createdAt)}
         </p>

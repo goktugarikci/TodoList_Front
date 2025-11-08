@@ -9,6 +9,7 @@ import Spinner from '../common/Spinner';
 import { useNavigate } from 'react-router-dom';
 import type { UserPublicInfo, BoardSummary, BoardRole } from '../../types/api';
 import { toast } from 'react-hot-toast'; // Hata/başarı bildirimleri için
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 // Backend'in (board.controller.js) /myboards için döndüğü yeni veri tipi
 interface UserBoardSummary extends Omit<BoardSummary, '_count' | 'createdAt'> {
@@ -195,7 +196,7 @@ const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
         {/* --- 1. Bölüm: Profil Resmi --- */}
         <section className={`flex flex-col items-center space-y-3 pb-6 ${sectionBorderClasses}`}>
           <img
-            src={user?.avatarUrl ? `${API_SOCKET_URL}${user.avatarUrl}` : `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`}
+            src={getAvatarUrl(user?.avatarUrl)}
             alt="Profil Resmi"
             className="w-28 h-28 rounded-full object-cover ring-2 ring-amber-400 ring-offset-2 ring-offset-zinc-800"
           />

@@ -11,6 +11,7 @@ import { getErrorMessage } from '../../utils/errorHelper';
 import { useChat } from '../../contexts/ChatContext';
 import { toast } from 'react-hot-toast'; // react-hot-toast import
 import { Menu, Transition } from '@headlessui/react'; // HeadlessUI Menu eklendi
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface BoardInfoModalProps {
   isOpen: boolean;
@@ -140,7 +141,7 @@ const BoardInfoModal: React.FC<BoardInfoModalProps> = ({ isOpen, onClose, board,
                         <div className="relative flex-shrink-0">
                           <img
                             className="h-9 w-9 rounded-full object-cover ring-1 ring-zinc-600"
-                            src={member.user.avatarUrl ? `${API_SOCKET_URL}${member.user.avatarUrl}` : `https://ui-avatars.com/api/?name=${member.user.name}&background=random`}
+                            src={getAvatarUrl(member.user.avatarUrl)}
                             alt={member.user.name}
                           />
                         </div>

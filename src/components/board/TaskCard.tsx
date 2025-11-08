@@ -6,6 +6,7 @@ import { Menu, Transition } from '@headlessui/react';
 import { ModalView } from '../../pages/BoardDetailPage';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface TaskCardProps {
   task: TaskDetailed;
@@ -138,7 +139,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         <img
                           key={assignee.id}
                           className="w-4 h-4 rounded-full object-cover ml-1 border border-zinc-900"
-                          src={assignee.avatarUrl ? `${API_SOCKET_URL}${assignee.avatarUrl}` : `https://ui-avatars.com/api/?name=${assignee.name}&size=16`}
+                          src={getAvatarUrl(assignee.avatarUrl)}
                           title={`Atanan: ${assignee.name}`}
                         />
                       ))}

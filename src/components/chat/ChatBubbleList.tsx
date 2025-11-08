@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { friendService } from '../../services/friendService';
 import { chatService } from '../../services/chatService';
 import type { FriendInfo, ConversationSummary, UserPublicInfo } from '../../types/api';
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 type ChatUser = (FriendInfo | UserPublicInfo) & { isOnline?: boolean };
 
@@ -71,7 +72,7 @@ const ChatBubbleList: React.FC = () => {
         >
           <img
             className="w-full h-full rounded-full object-cover"
-            src={user.avatarUrl ? `${API_SOCKET_URL}${user.avatarUrl}` : `https://ui-avatars.com/api/?name=${user.name}`}
+            src={getAvatarUrl(user.avatarUrl)}
             alt={user.name}
           />
           {/* Online Statü */}

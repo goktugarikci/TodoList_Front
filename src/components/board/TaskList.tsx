@@ -191,9 +191,33 @@ const TaskList: React.FC<TaskListProps> = ({ list, onOpenModal }) => {
     },
   });
 
-  // --- Liste (Sütun) Mutasyonları ---
-  const updateListTitleMutation = useMutation({ /* ... (Kod aynı) ... */ });
-  const deleteListMutation = useMutation({ /* ... (Kod aynı) ... */ });
+  // --- Liste (Sütun) Mutasyonları ---// Liste (Sütun) Adını Güncelleme
+  const updateListTitleMutation = useMutation({
+    mutationFn: () => taskListService.updateListTitle(list.id, currentListTitle),
+    onSuccess: (updatedList) => {
+      queryClient.setQueryData<BoardDetailed>(['boardDetails', list.boardId], (oldData) => {
+        if (!oldData) return oldData;
+        const newListData = oldData.lists.map((l) => (l.id === list.id ? { ...l, title: updatedList.title } : l));
+        return { ...oldData, lists: newListData };
+      });
+      setIsRenamingList(false);
+      toast.success('Liste adı güncellendi.');
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Liste adı güncellenemedi.')),
+  });
+ // Liste (Sütun) Silme
+  const deleteListMutation = useMutation({
+    mutationFn: () => taskListService.deleteList(list.id),
+    onSuccess: () => {
+      queryClient.setQueryData<BoardDetailed>(['boardDetails', list.boardId], (oldData) => {
+        if (!oldData) return oldData;
+        const newListData = oldData.lists.filter((l) => l.id !== list.id);
+        return { ...oldData, lists: newListData };
+      });
+      toast.success('Liste silindi.');
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Liste silinemedi.')),
+  });
 
   // --- Handler Fonksiyonları ---
   const handleAddTaskSubmit = (e: React.FormEvent) => {
@@ -202,8 +226,21 @@ const TaskList: React.FC<TaskListProps> = ({ list, onOpenModal }) => {
       createTaskMutation.mutate();
     }
   };
-  const handleRenameListSubmit = (e: React.FormEvent) => { /* ... (Kod aynı) ... */ };
-  const handleDeleteList = () => { /* ... (Kod aynı) ... */ };
+const handleRenameListSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentListTitle.trim() && currentListTitle !== list.title) {
+      updateListTitleMutation.mutate();
+    } else {
+      setIsRenamingList(false);
+      setCurrentListTitle(list.title); // Değişiklik yoksa eskiye dön
+    }
+  };
+  
+  const handleDeleteList = () => {
+    if (window.confirm(`'${list.title}' listesini silmek istediğinizden emin misiniz? İçindeki tüm görevler kalıcı olarak silinecektir.`)) {
+      deleteListMutation.mutate();
+    }
+  };
   const handleDeleteTask = (taskId: string) => {
     if (window.confirm("Bu görevi kalıcı olarak silmek istediğinizden emin misiniz?")) {
       deleteTaskMutation.mutate(taskId);
@@ -258,7 +295,15 @@ const TaskList: React.FC<TaskListProps> = ({ list, onOpenModal }) => {
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
             </Menu.Button>
-            <Transition as={Fragment} /* ... */ >
+            <Transition
+              as={Fragment}
+              enter="transition ease-out duration-100"
+              enterFrom="transform opacity-0 scale-95"
+              enterTo="transform opacity-100 scale-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="transform opacity-100 scale-100"
+              leaveTo="transform opacity-0 scale-95">
+                
               <Menu.Items 
                 onMouseDown={(e) => e.stopPropagation()} // DND: Sürüklemeyi engelle
                 className="absolute right-0 mt-2 w-48 origin-top-right divide-y divide-zinc-700 rounded-md bg-zinc-900 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none border border-zinc-700 z-10"

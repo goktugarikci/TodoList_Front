@@ -1,6 +1,7 @@
 // goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/board/BoardSettingsPanel.tsx
 import React, { useState, useEffect } from 'react';
-import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
+// DÜZELTME: API_SOCKET_URL import'u kaldırıldı
+import { useAuth } from '../../contexts/AuthContext';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { boardService } from '../../services/boardService';
 import { getErrorMessage } from '../../utils/errorHelper';
@@ -9,8 +10,8 @@ import Spinner from '../../components/common/Spinner';
 import { useNavigate } from 'react-router-dom';
 import type { BoardDetailed, UserPublicInfo, BoardRole } from '../../types/api';
 import { toast } from 'react-hot-toast'; 
-// YENİ: Toplu mesaj bileşeni
-import BulkNotificationSender from '../../components/board/BulkNotificationSender'; 
+// YENİ (image_4579e5.png): Profil fotoğrafı URL yardımcısı import edildi
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface BoardSettingsPanelProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ interface BoardSettingsPanelProps {
 }
 
 const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose, board }) => {
-  const { user } = useAuth(); // 'user.role' (ADMIN mi?) kontrolü için
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -33,6 +34,8 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
   }, [board, isOpen]);
 
   // --- Mutasyonlar (API İstekleri) ---
+
+  // Pano adını güncelle
   const updateNameMutation = useMutation({
     mutationFn: (newName: string) => boardService.updateBoard(board!.id, { name: newName }),
     onSuccess: (updatedBoard) => {
@@ -43,6 +46,7 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
     onError: (err) => toast.error(getErrorMessage(err, "Hata")),
   });
 
+  // Panoyu Sil
   const deleteBoardMutation = useMutation({
     mutationFn: () => boardService.deleteBoard(board!.id),
     onSuccess: () => {
@@ -54,6 +58,7 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
     onError: (err) => toast.error(getErrorMessage(err, "Hata")),
   });
   
+  // Üye Ekle
   const addMemberMutation = useMutation({
     mutationFn: (email: string) => boardService.addMemberByEmail(board!.id, { email }),
     onSuccess: () => {
@@ -64,6 +69,7 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
     onError: (err) => toast.error(getErrorMessage(err, "Hata")),
   });
   
+  // Üye Çıkar
   const removeMemberMutation = useMutation({
     mutationFn: (userIdToRemove: string) => boardService.removeMember(board!.id, { userIdToRemove }),
     onSuccess: () => {
@@ -73,6 +79,7 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
     onError: (err) => toast.error(getErrorMessage(err, "Hata")),
   });
   
+  // Rol Değiştir
   const changeRoleMutation = useMutation({
     mutationFn: ({ memberUserId, role }: { memberUserId: string; role: BoardRole }) => 
       boardService.changeMemberRole(board!.id, memberUserId, { role }),
@@ -115,12 +122,10 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
     changeRoleMutation.mutate({ memberUserId, role: newRole });
   };
 
-  if (!board) return null;
+  if (!board) return null; 
 
   const isBoardCreator = board.createdBy?.id === user?.id;
-  const isGlobalAdmin = user?.role === 'ADMIN'; // YENİ: Global admin kontrolü
 
-  // --- TEMA (Manuel Tailwind) ---
   const inputClasses = "mt-1 block w-full px-3 py-2 border border-zinc-700 bg-zinc-900 text-zinc-100 rounded-md shadow-sm focus:outline-none focus:ring-amber-400 focus:border-amber-400";
   const labelClasses = "block text-sm font-medium text-zinc-300";
   const sectionTitleClasses = "text-lg font-medium text-zinc-100 mb-4";
@@ -156,6 +161,7 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
         {/* Üye Yönetimi (Kişi Ekle/Çıkar) */}
         <section className={sectionBorderClasses}>
           <h4 className={sectionTitleClasses}>Üye Yönetimi</h4>
+          {/* Üye Ekle Formu */}
           <form onSubmit={handleAddMember} className="flex space-x-2 mb-4">
             <input
               type="email"
@@ -174,13 +180,15 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
             </button>
           </form>
 
+          {/* Üye Listesi */}
           <ul className="divide-y divide-zinc-700 max-h-60 overflow-y-auto pr-2">
             {board.members.map(member => (
               <li key={member.user.id} className="py-3 flex items-center justify-between">
                 <div className="flex items-center min-w-0">
                   <img
                     className="h-8 w-8 rounded-full object-cover"
-                    src={member.user.avatarUrl ? `${API_SOCKET_URL}${member.user.avatarUrl}` : `https://ui-avatars.com/api/?name=${member.user.name}`}
+                    // DÜZELTME (image_4579e5.png): getAvatarUrl kullan
+                    src={getAvatarUrl(member.user.avatarUrl, member.user.name)}
                     alt={member.user.name}
                   />
                   <div className="ml-3 min-w-0">
@@ -214,15 +222,6 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
             ))}
           </ul>
         </section>
-
-        {/* YENİ: Toplu Bildirim (Sadece Global Admin görebilir) */}
-        {isGlobalAdmin && (
-          <section className={sectionBorderClasses}>
-            <h4 className={sectionTitleClasses}>Toplu Bildirim Gönder</h4>
-            <p className="text-xs text-zinc-400 mb-3">Bu bildirim, seçtiğiniz hedef kitledeki (bu pano veya tüm kullanıcılar) herkese anlık olarak gönderilecektir.</p>
-            <BulkNotificationSender boardId={board.id} />
-          </section>
-        )}
 
         {/* Tehlikeli Alan (Panoyu Sil) */}
         <section>

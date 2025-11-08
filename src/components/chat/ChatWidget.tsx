@@ -7,6 +7,7 @@ import { formatMessageTimestamp } from '../../utils/formatDate';
 import Spinner from '../common/Spinner';
 import type { DirectMessageWithSender } from '../../types/api';
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react'; 
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 const ChatWidget: React.FC = () => {
   const { activeChatUser, closeChat, isMinimized, toggleMinimize } = useChat();
@@ -115,7 +116,7 @@ const ChatWidget: React.FC = () => {
         >
           <img
             className="w-full h-full rounded-full object-cover"
-            src={activeChatUser.avatarUrl ? `${API_SOCKET_URL}${activeChatUser.avatarUrl}` : `https://ui-avatars.com/api/?name=${activeChatUser.name}`}
+            src={getAvatarUrl(activeChatUser.avatarUrl)}
             alt={activeChatUser.name}
           />
           {activeChatUser.isOnline && (
@@ -140,7 +141,7 @@ const ChatWidget: React.FC = () => {
           <div className="relative flex-shrink-0">
             <img
               className="h-8 w-8 rounded-full object-cover"
-              src={activeChatUser.avatarUrl ? `${API_SOCKET_URL}${activeChatUser.avatarUrl}` : `https://ui-avatars.com/api/?name=${activeChatUser.name}`}
+              src={getAvatarUrl(activeChatUser.avatarUrl)}
               alt={activeChatUser.name}
             />
             {activeChatUser.isOnline && (
@@ -231,7 +232,7 @@ const MessageItem: React.FC<{ message: DirectMessageWithSender, isMe: boolean }>
       {!isMe && ( // Sadece 'Ben' değilse (mesajı alıyorsam) avatarı göster
         <img
           className="h-6 w-6 rounded-full object-cover mr-2 flex-shrink-0"
-          src={message.sender.avatarUrl ? `${API_SOCKET_URL}${message.sender.avatarUrl}` : `https://ui-avatars.com/api/?name=${message.sender.name}`}
+          src={getAvatarUrl(message.sender.avatarUrl)}
           alt={message.sender.name}
         />
       )}

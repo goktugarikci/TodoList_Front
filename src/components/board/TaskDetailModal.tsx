@@ -20,6 +20,7 @@ import TaskComments from './TaskComments';
 import TaskTimeTracker from './TaskTimeTracker';
 // YENİ: Reaksiyon bileşenini import et
 import ReactionManager from '../common/ReactionManager';
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -490,7 +491,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                     <div className="flex items-center">
                       <img
                         className="w-6 h-6 rounded-full object-cover"
-                        src={assignee.avatarUrl ? `${API_SOCKET_URL}${assignee.avatarUrl}` : `https://ui-avatars.com/api/?name=${assignee.name}`}
+                        src={getAvatarUrl(assignee.avatarUrl)}
                         alt={assignee.name}
                       />
                       <span className="ml-2 text-sm text-zinc-100">{assignee.name}</span>
@@ -520,7 +521,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                       <div className="flex items-center">
                         <img
                           className="w-6 h-6 rounded-full object-cover"
-                          src={member.user.avatarUrl ? `${API_SOCKET_URL}${member.user.avatarUrl}` : `https://ui-avatars.com/api/?name=${member.user.name}`}
+                          src={getAvatarUrl(member.user.avatarUrl)}
                           alt={member.user.name}
                         />
                         <span className="ml-2 text-sm text-zinc-100">{member.user.name}</span>
@@ -620,7 +621,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                         >
                           <img
                             className="w-5 h-5 rounded-full object-cover border border-zinc-900"
-                            src={assignee.avatarUrl ? `${API_SOCKET_URL}${assignee.avatarUrl}` : `https://ui-avatars.com/api/?name=${assignee.name}&size=20`}
+                            src={getAvatarUrl(assignee.avatarUrl)}
                           />
                         </button>
                     ))}

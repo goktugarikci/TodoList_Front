@@ -8,6 +8,7 @@ import Spinner from '../common/Spinner';
 import { useNavigate } from 'react-router-dom';
 import type { BoardDetailed, UserPublicInfo, BoardRole } from '../../types/api';
 import { toast } from 'react-hot-toast'; // Hata/başarı bildirimleri için
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface BoardSettingsPanelProps {
   isOpen: boolean;
@@ -190,7 +191,7 @@ const BoardSettingsPanel: React.FC<BoardSettingsPanelProps> = ({ isOpen, onClose
                 <div className="flex items-center min-w-0">
                   <img
                     className="h-8 w-8 rounded-full object-cover"
-                    src={member.user.avatarUrl ? `${API_SOCKET_URL}${member.user.avatarUrl}` : `https://ui-avatars.com/api/?name=${member.user.name}`}
+                    src={getAvatarUrl(member.user.avatarUrl)}
                     alt={member.user.name}
                   />
                   <div className="ml-3 min-w-0">

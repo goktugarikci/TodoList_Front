@@ -10,6 +10,7 @@ import type { TimeEntryWithUser, PaginatedTaskTimeEntries, UpdateManualTimeEntry
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface TaskTimeTrackerProps {
   taskId: string;
@@ -382,7 +383,7 @@ const TaskTimeTracker: React.FC<TaskTimeTrackerProps> = ({ taskId, boardId }) =>
             <div className="flex items-center">
                <img
                 className="w-6 h-6 rounded-full object-cover mr-2"
-                src={entry.user?.avatarUrl ? `${API_SOCKET_URL}${entry.user.avatarUrl}` : `https://ui-avatars.com/api/?name=${entry.user?.name || '?'}`}
+                src={getAvatarUrl(entry.user.avatarUrl)}
                 alt={entry.user?.name}
               />
               <div>

@@ -1,12 +1,14 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/friends/FriendsPanel.tsx
 import React, { useState } from 'react';
-import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
+// DÜZELTME (image_4579e5.png): API_SOCKET_URL import'u kaldırıldı
+import { useAuth } from '../../contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { friendService } from '../../services/friendService';
 import { chatService } from '../../services/chatService';
 import { getErrorMessage } from '../../utils/errorHelper';
-import SlideOverPanel from '../common/SlideOverPanel'; // Koyu temalı paneli kullan
-import Spinner from '../common/Spinner'; // Sarı temalı spinner'ı kullan
-import { useChat } from '../../contexts/ChatContext'; // Sohbet context'ini import et
+import SlideOverPanel from '../common/SlideOverPanel';
+import Spinner from '../common/Spinner';
+import { useChat } from '../../contexts/ChatContext';
 import type { 
   FriendInfo, 
   FriendRequestResponse, 
@@ -14,7 +16,9 @@ import type {
   UserAssigneeDto,
   UserPublicInfo 
 } from '../../types/api';
-import { toast } from 'react-hot-toast'; // Bildirimler için
+import { toast } from 'react-hot-toast';
+// YENİ (image_4579e5.png): Profil fotoğrafı URL yardımcısı import edildi
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 // ChatContext'ten gelen beklenen tip (Arkadaş veya değil)
 type ChatUser = (UserAssigneeDto | UserPublicInfo | FriendInfo) & { isOnline?: boolean };
@@ -60,8 +64,6 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ isOpen, onClose }) => {
   // Arkadaş Çıkarma
   const removeFriendMutation = useMutation({
     mutationFn: friendService.removeFriend,
-    // --- HATA DÜZELTMESİ ( ()_ =>  yerine  () => ) ---
-    // Bu, "Arkadaşlar ve Sohbet işlevsiz" sorununu çözer
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['friends'] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] }); // Sohbetleri de etkileyebilir
@@ -74,8 +76,6 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ isOpen, onClose }) => {
   const respondRequestMutation = useMutation({
     mutationFn: ({ requestId, response }: { requestId: string; response: 'ACCEPT' | 'DECLINE' }) =>
       friendService.respondToRequest(requestId, { response }),
-    // --- HATA DÜZELTMESİ ( ()_ =>  yerine  (_, variables) => ) ---
-    // Bu, "istekler kabul edilemiyor" sorununu çözer
     onSuccess: (_, variables) => { // 'variables' ile hangi butona basıldığını al
       refetchRequests(); // İstek listesini yenile
       queryClient.invalidateQueries({ queryKey: ['friends'] }); // Arkadaş listesini de yenile
@@ -99,7 +99,6 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ isOpen, onClose }) => {
     respondRequestMutation.mutate({ requestId, response });
   };
   
-  // DÜZELTME: 'friendId: string' -> 'userToChat: ChatUser'
   const handleStartChat = (userToChat: ChatUser) => {
     chat.openChat(userToChat); // ChatContext'e tam objeyi gönder
     onClose(); // Arkadaşlar panelini kapat
@@ -113,7 +112,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ isOpen, onClose }) => {
           <FriendList
             friends={friends}
             isLoading={isLoadingFriends}
-            onStartChat={handleStartChat} // 'FriendInfo' (isOnline içerir) gönderir
+            onStartChat={handleStartChat}
             onRemoveFriend={handleRemoveFriend}
           />
         );
@@ -187,7 +186,7 @@ const TabButton: React.FC<{ name: string, isActive: boolean, onClick: () => void
 const FriendList: React.FC<{
   friends?: FriendInfo[],
   isLoading: boolean,
-  onStartChat: (user: FriendInfo) => void, // DÜZELTME: 'id: string' -> 'user: FriendInfo'
+  onStartChat: (user: FriendInfo) => void,
   onRemoveFriend: (friend: FriendInfo) => void
 }> = ({ friends, isLoading, onStartChat, onRemoveFriend }) => {
   if (isLoading) return <div className="flex justify-center"><Spinner /></div>;
@@ -201,7 +200,8 @@ const FriendList: React.FC<{
             <div className="relative">
               <img
                 className="h-10 w-10 rounded-full object-cover"
-                src={friend.avatarUrl ? `${API_SOCKET_URL}${friend.avatarUrl}` : `https://ui-avatars.com/api/?name=${friend.name}&background=random`}
+                // DÜZELTME (image_4579e5.png): getAvatarUrl kullan
+                src={getAvatarUrl(friend.avatarUrl, friend.name)}
                 alt={friend.name}
               />
               {friend.isOnline && (
@@ -214,7 +214,6 @@ const FriendList: React.FC<{
             </div>
           </div>
           <div className="flex-shrink-0 flex space-x-2">
-            {/* DÜZELTME: 'friend' objesinin tamamını gönder */}
             <button onClick={() => onStartChat(friend)} className="p-2 text-zinc-500 hover:text-blue-400" title="Sohbet Başlat">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
             </button>
@@ -232,8 +231,8 @@ const FriendList: React.FC<{
 const ConversationList: React.FC<{
   conversations?: ConversationSummary[],
   isLoading: boolean,
-  onStartChat: (user: ChatUser) => void, // 'UserPublicInfo' -> 'ChatUser'
-  friendsCache?: FriendInfo[] // 'isOnline' durumunu bulmak için
+  onStartChat: (user: ChatUser) => void,
+  friendsCache?: FriendInfo[] 
 }> = ({ conversations, isLoading, onStartChat, friendsCache }) => {
   if (isLoading) return <div className="flex justify-center"><Spinner /></div>;
   if (!conversations || conversations.length === 0) return <p className="text-zinc-400">Aktif sohbetiniz bulunmuyor.</p>;
@@ -241,7 +240,6 @@ const ConversationList: React.FC<{
   return (
     <ul className="divide-y divide-zinc-700"> {/* Sınır rengi güncellendi */}
       {conversations.map(convo => {
-        // 'isOnline' durumunu arkadaş listesinden (cache) bul
         const friendStatus = friendsCache?.find(f => f.id === convo.otherUser.id);
         const userToChat: ChatUser = {
           ...convo.otherUser,
@@ -254,7 +252,8 @@ const ConversationList: React.FC<{
               <div className="relative flex-shrink-0">
                 <img
                   className="h-10 w-10 rounded-full object-cover"
-                  src={convo.otherUser.avatarUrl ? `${API_SOCKET_URL}${convo.otherUser.avatarUrl}` : `https://ui-avatars.com/api/?name=${convo.otherUser.name}&background=random`}
+                  // DÜZELTME (image_4579e5.png): getAvatarUrl kullan
+                  src={getAvatarUrl(convo.otherUser.avatarUrl, convo.otherUser.name)}
                   alt={convo.otherUser.name}
                 />
                 {userToChat.isOnline && (
@@ -302,7 +301,8 @@ const RequestList: React.FC<{
                 <div className="flex items-center min-w-0">
                   <img
                     className="h-10 w-10 rounded-full object-cover"
-                    src={req.requester?.avatarUrl ? `${API_SOCKET_URL}${req.requester.avatarUrl}` : `https://ui-avatars.com/api/?name=${req.requester?.name}&background=random`}
+                    // DÜZELTME (image_4579e5.png): getAvatarUrl kullan
+                    src={getAvatarUrl(req.requester?.avatarUrl, req.requester?.name)}
                     alt={req.requester?.name}
                   />
                   <div className="ml-3 min-w-0">
@@ -336,7 +336,8 @@ const RequestList: React.FC<{
                 <div className="flex items-center min-w-0">
                   <img
                     className="h-10 w-10 rounded-full object-cover"
-                    src={req.receiver?.avatarUrl ? `${API_SOCKET_URL}${req.receiver.avatarUrl}` : `https://ui-avatars.com/api/?name=${req.receiver?.name}&background=random`}
+                    // DÜZELTME (image_4579e5.png): getAvatarUrl kullan
+                    src={getAvatarUrl(req.receiver?.avatarUrl, req.receiver?.name)}
                     alt={req.receiver?.name}
                   />
                   <div className="ml-3 min-w-0">
