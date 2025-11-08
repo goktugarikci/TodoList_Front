@@ -1,24 +1,20 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/App.tsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import LandingPage from './pages/LandingPage';
-import BoardPage from './pages/BoardPage'; // Pano Listesi Sayfası
-import BoardDetailPage from './pages/BoardDetailPage'; // YENİ: Pano Detay Sayfası
-import { ProtectedLayout } from './components/layout/ProtectedLayout'; // Korumalı Rota
-import Spinner from './components/common/Spinner'; // Yükleme ikonu
+import BoardPage from './pages/BoardPage'; 
+import BoardDetailPage from './pages/BoardDetailPage'; 
+import { ProtectedLayout } from './components/layout/ProtectedLayout'; 
+import Spinner from './components/common/Spinner';
+// YENİ: Google Callback sayfasını import et
+import AuthCallbackPage from './pages/AuthCallbackPage'; 
 
-/**
- * Ana Uygulama Bileşeni.
- * Artık tüm sayfa yönlendirmelerini (routing) yönetir.
- */
 const App: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // AuthContext, sayfa yenilendiğinde token'ı doğrularken
-  // 'isLoading' true olur. Bu sırada bir yüklenme ekranı gösteririz.
   if (isLoading) {
     return (
-      // Koyu tema yükleme ekranı
       <div className="flex items-center justify-center h-screen bg-zinc-900">
         <Spinner size="lg" />
       </div>
@@ -27,33 +23,32 @@ const App: React.FC = () => {
 
   return (
     <Routes>
-      {/* KORUMALI ALAN: Sadece giriş yapmış kullanıcılar erişebilir.
-        ProtectedLayout (Navigasyon çubuğu vb. içerir)
-      */}
+      {/* KORUMALI ALAN: Sadece giriş yapmış kullanıcılar erişebilir. */}
       <Route element={<ProtectedLayout />}>
-        {/* /boards -> Pano listesini göster (BoardPage) */}
         <Route 
           path="/boards" 
           element={isAuthenticated ? <BoardPage /> : <Navigate to="/" replace />} 
         />
-        {/* /board/:boardId -> Pano detayını göster (YENİ SAYFA) */}
         <Route 
           path="/board/:boardId" 
           element={isAuthenticated ? <BoardDetailPage /> : <Navigate to="/" replace />} 
         />
       </Route>
 
-      {/* HERKESE AÇIK ALAN:
-      */}
+      {/* HERKESE AÇIK ALAN: */}
+      
+      {/* YENİ: Google OAuth Callback Rotası */}
+      <Route 
+        path="/auth/callback" 
+        element={<AuthCallbackPage />} 
+      />
+      
       {/* / -> Ana sayfa */}
       <Route 
         path="/" 
         element={isAuthenticated ? <Navigate to="/boards" replace /> : <LandingPage />} 
       />
       
-      {/* TODO: Google OAuth Callback rotası */}
-      {/* <Route path="/auth/callback" element={<GoogleCallbackHandler />} /> */}
-
       {/* Bulunamayan tüm rotaları ana sayfaya yönlendir */}
       <Route path="*" element={<Navigate to={isAuthenticated ? "/boards" : "/"} replace />} />
     </Routes>

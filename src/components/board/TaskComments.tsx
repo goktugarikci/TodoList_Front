@@ -157,7 +157,7 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
   return (
     <div className="flex flex-col">
       {/* Yorum Listesi */}
-      {/* DÜZELTME (image_82e3d6.png): 'overflow-y-auto' kaldırıldı */}
+      {/* DÜZELTME (image_82e3d6.png / image_1ba342.png): 'overflow-y-auto' kaldırıldı */}
       <div className="flex-1 space-y-4 pr-2">
         {isLoading && <div className="flex justify-center"><Spinner /></div>}
         
@@ -230,6 +230,7 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
                 <span>{formatMessageTimestamp(comment.createdAt)}</span>
                 
                 {/* Reaksiyon Yöneticisi sağa yaslandı */}
+                {/* 'relative' ve 'z-20' (veya daha yüksek) Popover'ın doğru çalışması için kritiktir */}
                 <div className="relative z-20"> 
                   <ReactionManager
                     reactions={comment.reactions || []}
