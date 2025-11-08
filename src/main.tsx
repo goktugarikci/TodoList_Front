@@ -9,7 +9,6 @@ import App from './App'
 import './index.css'
 import ChatWidget from './components/chat/ChatWidget' // Açık sohbet penceresi
 import ChatBubbleList from './components/chat/ChatBubbleList' // Kayan baloncuklar
-
 const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -24,7 +23,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             {/* Sohbet Sistemi (Tüm sayfaların üstünde) */}
             <ChatWidget />      {/* 1. Sadece sohbet AÇIKKEN görünür */}
             <ChatBubbleList />  {/* 2. Sadece sohbet KAPALIYKEN ve okunmamış mesaj varsa görünür */}
-            
             {/* Pop-up Bildirim Konteyneri */}
             <Toaster position="bottom-right" />
 

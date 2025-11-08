@@ -529,6 +529,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
         <div className="space-y-2">
           <h4 className="text-lg font-semibold text-zinc-100">Ekler</h4>
           <div className="flex flex-wrap gap-2">
+            {/* DÜZELTME (image_dc4028.png): (task.attachments || []) eklendi */}
             {(task.attachments || []).map(att => (
               <AttachmentItem 
                 key={att.id} 
@@ -609,8 +610,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                       </Menu.Button>
                       <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100">
                         <Menu.Items className="absolute right-0 bottom-full mb-1 w-48 max-h-48 overflow-y-auto rounded-md bg-zinc-900 border border-zinc-700 shadow-lg z-20">
-                          {unassignedBoardMembers.length > 0 ? (
-                            unassignedBoardMembers.map(member => (
+                          {unassignedChecklistMembers.length > 0 ? (
+                            unassignedChecklistMembers.map(member => (
                               <Menu.Item key={member.user.id}>
                                 {({ active }) => (
                                   <button
