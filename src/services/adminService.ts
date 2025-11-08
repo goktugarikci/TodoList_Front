@@ -1,3 +1,4 @@
+// goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/services/adminService.ts
 import axiosClient from '../api/axiosClient';
 import { getErrorMessage } from '../utils/errorHelper';
 import type {
@@ -8,10 +9,17 @@ import type {
   SystemStats,
   PaginatedActivityLogs,
   BulkMessageRequest,
-  ChangeUserRoleRequest,
+  ApiErrorResponse,
+  
+  // DÜZELTME: Eksik tipler eklendi
+  SupportTicket,
+  SupportTicketSummary,
+  SupportTicketDetailed,
+  TicketStatus,
+  AssignTicketRequest,
+  ChangeUserRoleRequest, // (Bu tiplerin 'types/api.ts' dosyanızda olduğunu varsayıyorum)
   SetUserStatusRequest,
-  TransferOwnershipRequest,
-  ApiErrorResponse
+  TransferOwnershipRequest
 } from '../types/api';
 
 // === Pano Yönetimi ===
@@ -117,6 +125,77 @@ const sendBulkMessage = async (data: BulkMessageRequest): Promise<{ msg: string 
   } catch (error: unknown) { throw new Error(getErrorMessage(error, 'Toplu mesaj gönderilemedi.')); }
 };
 
+// === YENİ: Destek Bileti Admin Servisleri ===
+// (supportService.ts'den buraya taşındı)
+
+/**
+ * (Admin) Tüm destek biletlerini listeler.
+ * API: GET /api/support/tickets
+ */
+const getAllTickets = async (): Promise<SupportTicketSummary[]> => {
+  try {
+    const response = await axiosClient.get<SupportTicketSummary[]>('/support/tickets');
+    return response.data;
+  } catch (error: unknown) {
+    throw new Error(getErrorMessage(error, 'Destek biletleri getirilemedi.'));
+  }
+};
+
+/**
+ * (Admin) Tek bir destek biletinin detaylarını getirir.
+ * API: GET /api/support/tickets/:ticketId
+ */
+const getTicketById = async (ticketId: string): Promise<SupportTicketDetailed> => {
+  try {
+    const response = await axiosClient.get<SupportTicketDetailed>(`/support/tickets/${ticketId}`);
+    return response.data;
+  } catch (error: unknown) {
+    throw new Error(getErrorMessage(error, 'Bilet detayı getirilemedi.'));
+  }
+};
+
+/**
+ * (Admin) Bir biletin durumunu günceller.
+ * API: PUT /api/support/tickets/:ticketId/status
+ */
+const updateTicketStatus = async (ticketId: string, status: TicketStatus): Promise<SupportTicket> => {
+  try {
+    const response = await axiosClient.put<SupportTicket>(`/support/tickets/${ticketId}/status`, { status });
+    return response.data;
+  } catch (error: unknown) {
+    throw new Error(getErrorMessage(error, 'Bilet durumu güncellenemedi.'));
+  }
+};
+
+/**
+ * (Admin) Bir bileti bir admine atar.
+ * DÜZELTME: Rota '/admin/support/...' olmalı
+ * API: PUT /api/admin/support/tickets/:ticketId/assign
+ */
+const assignTicket = async (ticketId: string, data: AssignTicketRequest): Promise<SupportTicket> => {
+  try {
+    const response = await axiosClient.put<SupportTicket>(`/admin/support/tickets/${ticketId}/assign`, data);
+    return response.data;
+  } catch (error: unknown) {
+    throw new Error(getErrorMessage(error, 'Bilet atanamadı.'));
+  }
+};
+
+/**
+ * (Admin) Bir destek biletini siler.
+ * DÜZELTME: Rota '/admin/support/...' olmalı
+ * API: DELETE /api/admin/support/tickets/:ticketId
+ */
+const deleteTicket = async (ticketId: string): Promise<{ msg: string }> => {
+  try {
+    const response = await axiosClient.delete<{ msg: string }>(`/admin/support/tickets/${ticketId}`);
+    return response.data;
+  } catch (error: unknown) {
+    throw new Error(getErrorMessage(error, 'Bilet silinemedi.'));
+  }
+};
+// === BİTİŞ ===
+
 
 export const adminService = {
   getAllBoards,
@@ -133,4 +212,10 @@ export const adminService = {
   getSystemStats,
   getActivityLogs,
   sendBulkMessage,
+  // YENİ EKLENENLER:
+  getAllTickets,
+  getTicketById,
+  updateTicketStatus,
+  assignTicket,
+  deleteTicket,
 };

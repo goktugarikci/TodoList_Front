@@ -2,7 +2,6 @@
 import React, { Fragment, useMemo } from 'react';
 import type { ReactionSummary } from '../../types/api';
 import { Popover, Transition } from '@headlessui/react';
-// DÜZELTME: Tam emoji picker kaldırıldı
 
 interface ReactionManagerProps {
   reactions: ReactionSummary[];
@@ -10,7 +9,7 @@ interface ReactionManagerProps {
   onToggleReaction: (emoji: string) => void;
 }
 
-// YENİ: Sadece istenen emojiler
+// Sizin istediğiniz 13 emoji
 const PREDEFINED_EMOJIS = [
   '👍', '👎', '😀', '😁', '😄', '😅', '🤣', '😂', 
   '🤑', '🤬', '😡', '✔️', '❌'
@@ -60,11 +59,6 @@ const ReactionManager: React.FC<ReactionManagerProps> = ({ reactions, currentUse
       })}
 
       {/* Emoji Ekleme Butonu (Popover) */}
-      
-      {/* DÜZELTME (image_82e3d6.png & image_83794a.png): 
-        'className="relative"' kaldırıldı. 
-        Bu, Popover.Panel'in modalın dışına (en üste) çıkmasına izin verir.
-      */}
       <Popover>
         {({ open, close }) => (
           <>
@@ -84,9 +78,12 @@ const ReactionManager: React.FC<ReactionManagerProps> = ({ reactions, currentUse
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              {/* z-60 (Modal z-50 olduğu için) */}
-              <Popover.Panel className="absolute bottom-full right-0 z-60 mb-2">
-                {/* YENİ: Özel Emoji Seçim Kartı */}
+              {/* DÜZELTME (image_1ba342.png): 
+                'absolute bottom-full right-0' kaldırıldı.
+                HeadlessUI'nin pozisyonu (yukarı/aşağı) otomatik belirlemesine izin verildi.
+                'z-60' modalın (z-50) üzerinde kalmasını sağlar.
+              */}
+              <Popover.Panel className="absolute z-60 right-0 mt-2 mb-2"> 
                 <div className="p-2 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl grid grid-cols-7 gap-1 w-64">
                   {PREDEFINED_EMOJIS.map(emoji => (
                     <button
@@ -107,4 +104,4 @@ const ReactionManager: React.FC<ReactionManagerProps> = ({ reactions, currentUse
   );
 };
 
-export default ReactionManager;
+export default ReactionManager;                       

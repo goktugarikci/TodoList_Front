@@ -1,5 +1,6 @@
 // goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/board/TaskDetailModal.tsx
 import React, { useState, useEffect, Fragment, useRef } from 'react';
+// DÜZELTME: ReactionSummary eklendi
 import type { TaskDetailed, BoardDetailed, UserAssigneeDto, UserPublicInfo, ChecklistItemDetailed, TaskApprovalStatus, TaskAttachment, ReactionSummary } from '../../types/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query'; 
 import { taskService } from '../../services/taskService';
@@ -12,17 +13,20 @@ import Spinner from '../common/Spinner';
 import { toast } from 'react-hot-toast';
 import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
 import { Menu, Transition } from '@headlessui/react';
+// DÜZELTME: ModalView tipi import edildi
 import { ModalView } from '../../pages/BoardDetailPage';
 import TaskComments from './TaskComments';
+// YENİ: Zaman Takibi bileşenini import et
 import TaskTimeTracker from './TaskTimeTracker';
-import ReactionManager from '../common/ReactionManager'; // YENİ
+// YENİ: Reaksiyon bileşenini import et
+import ReactionManager from '../common/ReactionManager';
 
 interface TaskDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   task: TaskDetailed | null;
   board: BoardDetailed | null; 
-  initialView?: ModalView;
+  initialView?: ModalView; // Hangi sekmenin açılacağını belirler
 }
 
 // Ek (Attachment) Bileşeni
@@ -76,7 +80,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const boardId = board?.id;
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // === DÜZELTME (TypeScript Hatası): Scroll (kaydırma) ref'leri kaldırıldı ===
+  // === DÜZELTME (TypeScript Hatası - image_fb25fe.png): Scroll (kaydırma) ref'leri kaldırıldı ===
   
   // --- 2. Cache Güncelleme Yardımcısı ---
   const updateChecklistItemInCache = (updatedItem: ChecklistItemDetailed) => {
@@ -106,7 +110,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
         return { ...oldData, lists: newListData };
       });
       toast.success('Görev silindi.');
-      onClose();
+      onClose(); // Modalı kapat
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Görev silinemedi.')),
   });
@@ -115,19 +119,23 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     mutationFn: (data: { title?: string, description?: string | null, approvalStatus?: TaskApprovalStatus }) => 
       taskService.updateTask(task!.id, data),
     onSuccess: (updatedTask) => {
-      if (!boardId) return;
+      // 'boardDetails' önbelleğini anlık olarak güncelle
       queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
         if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({ ...list, tasks: list.tasks.map(t => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t)) }));
+        const newListData = oldData.lists.map(list => ({
+          ...list,
+          tasks: list.tasks.map(t => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
+        }));
         return { ...oldData, lists: newListData };
       });
+      // Başlık için 'blur' sonrası state'i senkronize et
       setEditableTitle(updatedTask.title);
       setEditableDescription(updatedTask.description || '');
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Görev güncellenemedi.')),
   });
-
-  // === DÜZELTME (Gecikme Sorunu): Kişi Atama (Optimistic Update) ===
+  
+  // === DÜZELTME (Gecikme Sorunu - image_0683df.png): Kişi Atama (Optimistic Update) ===
   const assignTaskMutation = useMutation({
     mutationFn: (assignUserId: string) => taskService.assignTask(task!.id, { assignUserId }),
     onMutate: async (assignUserId) => {
@@ -158,7 +166,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     },
   });
 
-  // === DÜZELTME (Gecikme Sorunu): Kişi Çıkarma (Optimistic Update) ===
+  // === DÜZELTME (Gecikme Sorunu - image_0683df.png): Kişi Çıkarma (Optimistic Update) ===
   const unassignTaskMutation = useMutation({
     mutationFn: (unassignUserId: string) => taskService.unassignTask(task!.id, { unassignUserId }),
     onMutate: async (unassignUserId) => {
@@ -189,12 +197,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const createChecklistItemMutation = useMutation({
     mutationFn: (text: string) => checklistService.createChecklistItem(task!.id, { text }),
     onSuccess: (newItem) => {
-      if (!boardId) return;
+      // 'boardDetails' cache'ini anlık güncelle
       queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
         if (!oldData) return oldData;
         const newListData = oldData.lists.map(list => ({
           ...list,
-          tasks: list.tasks.map(t => (t.id === task!.id ? { ...t, checklistItems: [...(t.checklistItems || []), newItem] } : t))
+          tasks: list.tasks.map(t => (t.id === task!.id ? { ...t, checklistItems: [...t.checklistItems, newItem] } : t))
         }));
         return { ...oldData, lists: newListData };
       });
@@ -203,16 +211,19 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     onError: (err) => toast.error(getErrorMessage(err, 'Alt görev eklenemedi.')),
   });
   
+  // Checklist Item Toggle (Tamamlandı İşaretle)
   const toggleChecklistItemMutation = useMutation({
     mutationFn: (itemId: string) => checklistService.toggleChecklistItem(itemId),
-    onSuccess: (updatedItem) => updateChecklistItemInCache(updatedItem),
+    onSuccess: (updatedItem) => {
+      updateChecklistItemInCache(updatedItem); // Yardımcı fonksiyonu kullan
+    },
     onError: (err) => toast.error(getErrorMessage(err, 'Alt görev durumu güncellenemedi.')),
   });
   
+  // Checklist Item Sil
   const deleteChecklistItemMutation = useMutation({
     mutationFn: (itemId: string) => checklistService.deleteChecklistItem(itemId),
-    onSuccess: (_, itemId) => { 
-      if (!boardId) return;
+    onSuccess: (_, itemId) => { // 'variables' (itemId) ikinci parametredir
       queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
         if (!oldData) return oldData;
         const newListData = oldData.lists.map(list => ({
@@ -290,10 +301,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     },
   });
 
+  // Ek Yükleme Mutasyonu
   const uploadAttachmentMutation = useMutation({
     mutationFn: (files: File[]) => attachmentService.uploadAttachments(task!.id, files),
     onSuccess: (newAttachments) => {
-      if (!boardId) return;
+      // 'boardDetails' cache'ini anlık güncelle
       queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
         if (!oldData) return oldData;
         const newListData = oldData.lists.map(list => ({
@@ -307,10 +319,10 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     onError: (err) => toast.error(getErrorMessage(err, "Dosya yüklenemedi.")),
   });
   
+  // Ek Silme Mutasyonu
   const deleteAttachmentMutation = useMutation({
     mutationFn: (attachmentId: string) => attachmentService.deleteAttachment(attachmentId),
     onSuccess: (_, attachmentId) => {
-      if (!boardId) return;
       queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
         if (!oldData) return oldData;
         const newListData = oldData.lists.map(list => ({
@@ -402,6 +414,15 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const handleDescriptionBlur = () => {
     if (editableDescription !== (task.description || '')) { updateTaskMutation.mutate({ description: editableDescription }); }
   };
+  const handleToggleCompleted = () => {
+    const newStatus = task.approvalStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
+    updateTaskMutation.mutate({ approvalStatus: newStatus });
+  };
+  const handleDeleteTask = () => {
+    if (window.confirm(`'${task.title}' görevini kalıcı olarak silmek istediğinizden emin misiniz?`)) {
+      deleteTaskMutation.mutate();
+    }
+  };
   const handleAddChecklistItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (newChecklistItem.trim()) { createChecklistItemMutation.mutate(newChecklistItem.trim()); }
@@ -417,7 +438,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
 
   // --- 7. Hesaplamalar (Render için) ---
   const taskAssigneeIds = new Set((task.assignees || []).map(a => a.id));
-  const unassignedBoardMembers = board.members.filter(m => !taskAssigneeIds.has(m.user.id));
+  const unassignedMembers = board.members.filter(m => !taskAssigneeIds.has(m.user.id));
 
   // === ARAYÜZ (VIEW) YÖNETİMİ ===
   const modalConfig = {
@@ -493,8 +514,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-2">Panodaki Diğer Üyeler</label>
              <div className="p-2 bg-zinc-900 rounded-md max-h-48 overflow-y-auto">
-                {unassignedBoardMembers.length > 0 ? (
-                  unassignedBoardMembers.map(member => (
+                {unassignedMembers.length > 0 ? (
+                  unassignedMembers.map(member => (
                     <div key={member.user.id} className="flex items-center justify-between group p-1.5 rounded-md hover:bg-zinc-700">
                       <div className="flex items-center">
                         <img

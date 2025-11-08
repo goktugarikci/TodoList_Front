@@ -2,10 +2,9 @@
 import axiosClient from '../api/axiosClient';
 import { getErrorMessage } from '../utils/errorHelper';
 import type {
-  TimeEntry,
   CreateManualTimeEntryRequest,
   StopTimeEntryRequest,
-  // DÜZELTME: Ayrı tipler kullanılıyor
+  // DÜZELTME: 'image_771db1.png' hatasını çözmek için spesifik tipler
   PaginatedTaskTimeEntries,
   PaginatedUserTimeEntries,
   TimeEntryWithUser,
@@ -15,6 +14,7 @@ import type {
 /**
  * Bir görev için zamanlayıcıyı başlatır.
  * API: POST /api/tasks/:taskId/time-entries/start
+ * DÜZELTME: Backend 'TimeEntryWithUser' döndürüyor
  */
 const startTimer = async (taskId: string): Promise<TimeEntryWithUser> => {
   try {
@@ -28,6 +28,7 @@ const startTimer = async (taskId: string): Promise<TimeEntryWithUser> => {
 /**
  * Bir görev için çalışan zamanlayıcıyı durdurur.
  * API: POST /api/tasks/:taskId/time-entries/stop
+ * DÜZELTME: Backend 'TimeEntryWithUser' döndürüyor
  */
 const stopTimer = async (taskId: string, data: StopTimeEntryRequest = {}): Promise<TimeEntryWithUser> => {
   try {
@@ -41,6 +42,7 @@ const stopTimer = async (taskId: string, data: StopTimeEntryRequest = {}): Promi
 /**
  * Bir göreve manuel zaman girişi ekler.
  * API: POST /api/tasks/:taskId/time-entries
+ * DÜZELTME: Backend 'TimeEntryWithUser' döndürüyor
  */
 const addManualEntry = async (taskId: string, data: CreateManualTimeEntryRequest): Promise<TimeEntryWithUser> => {
   try {
@@ -54,10 +56,10 @@ const addManualEntry = async (taskId: string, data: CreateManualTimeEntryRequest
 /**
  * Bir görevin zaman kayıtlarını listeler (sayfalı).
  * API: GET /api/tasks/:taskId/time-entries
+ * DÜZELTME: 'PaginatedTaskTimeEntries' tipini kullanır (image_771db1.png hatası)
  */
 const getEntriesForTask = async (taskId: string, page: number = 1, limit: number = 25): Promise<PaginatedTaskTimeEntries> => {
   try {
-    // DÜZELTME: Doğru paginated tipi kullan
     const response = await axiosClient.get<PaginatedTaskTimeEntries>(`/tasks/${taskId}/time-entries`, {
       params: { page, limit }
     });
@@ -68,12 +70,12 @@ const getEntriesForTask = async (taskId: string, page: number = 1, limit: number
 };
 
 /**
- * Giriş yapmış kullanıcının zaman kayıtlarını getirir.
+ * Giriş yapmış kullanıcının zaman kayıtlarını getirir (tarih aralığı, sayfalı).
  * API: GET /api/user/me/time-entries
+ * DÜZELTME: 'PaginatedUserTimeEntries' tipini kullanır (image_771db1.png hatası)
  */
 const getMyTimeEntries = async (params: { startDate?: string, endDate?: string, page?: number, limit?: number } = {}): Promise<PaginatedUserTimeEntries> => {
   try {
-    // DÜZELTME: Doğru paginated tipi kullan
     const response = await axiosClient.get<PaginatedUserTimeEntries>('/user/me/time-entries', { params });
     return response.data;
   } catch (error: unknown) {
@@ -81,7 +83,7 @@ const getMyTimeEntries = async (params: { startDate?: string, endDate?: string, 
   }
 };
 
-// === YENİ FONKSİYONLAR ===
+// === YENİ FONKSİYONLAR (Backend'de mevcut) ===
 
 /**
  * Mevcut bir zaman girişini günceller (Süre, Tarih, Not).
