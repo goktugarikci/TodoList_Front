@@ -1,33 +1,30 @@
 // goktugarikci/todolist_front/TodoList_Front-8a57f0ff9ce121525b5f99cbb4b27dcf9de3c497/src/components/board/TaskDetailModal.tsx
 import React, { useState, useEffect, Fragment, useRef } from 'react';
-// DÜZELTME: ReactionSummary eklendi
 import type { TaskDetailed, BoardDetailed, UserAssigneeDto, UserPublicInfo, ChecklistItemDetailed, TaskApprovalStatus, TaskAttachment, ReactionSummary } from '../../types/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query'; 
 import { taskService } from '../../services/taskService';
 import { checklistService } from '../../services/checklistService';
 import { attachmentService } from '../../services/attachmentService';
-import { reactionService } from '../../services/reactionService'; // YENİ
+import { reactionService } from '../../services/reactionService';
 import { getErrorMessage } from '../../utils/errorHelper';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import { toast } from 'react-hot-toast';
-import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
+// DÜZELTME (image_4579e5.png): getAvatarUrl import edildi
+import { getAvatarUrl } from '../../utils/getAvatarUrl';
 import { Menu, Transition } from '@headlessui/react';
-// DÜZELTME: ModalView tipi import edildi
 import { ModalView } from '../../pages/BoardDetailPage';
 import TaskComments from './TaskComments';
-// YENİ: Zaman Takibi bileşenini import et
 import TaskTimeTracker from './TaskTimeTracker';
-// YENİ: Reaksiyon bileşenini import et
 import ReactionManager from '../common/ReactionManager';
-import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface TaskDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   task: TaskDetailed | null;
   board: BoardDetailed | null; 
-  initialView?: ModalView; // Hangi sekmenin açılacağını belirler
+  initialView?: ModalView;
 }
 
 // Ek (Attachment) Bileşeni
@@ -37,7 +34,8 @@ const AttachmentItem: React.FC<{
   isDeleting: boolean;
 }> = ({ attachment, onDelete, isDeleting }) => {
   const isImage = attachment.fileType?.startsWith('image/');
-  const fileUrl = `${API_SOCKET_URL}${attachment.url}`;
+  // DÜZELTME (image_4579e5.png): getAvatarUrl (benzeri mantık)
+  const fileUrl = attachment.url.startsWith('http') ? attachment.url : getAvatarUrl(attachment.url, attachment.fileName);
 
   return (
     <div className="relative group w-24 h-24 bg-zinc-700 rounded-md overflow-hidden">
@@ -81,25 +79,42 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   const boardId = board?.id;
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // === DÜZELTME (TypeScript Hatası - image_fb25fe.png): Scroll (kaydırma) ref'leri kaldırıldı ===
+  // === DÜZELTME (image_fb25fe.png): Hatalı scroll ref'leri kaldırıldı ===
   
-  // --- 2. Cache Güncelleme Yardımcısı ---
-  const updateChecklistItemInCache = (updatedItem: ChecklistItemDetailed) => {
+  // --- 2. Cache Güncelleme Yardımcıları (Optimistic Updates için) ---
+  
+  /** Önbellekteki BoardDetailed verisini günceller */
+  const updateBoardDataInCache = (updateFn: (oldData: BoardDetailed) => BoardDetailed) => {
     if (!boardId) return;
     queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
       if (!oldData) return oldData;
-      const newListData = oldData.lists.map(list => ({
-        ...list,
-        tasks: list.tasks.map(t => (t.id === task!.id ? {
-          ...t,
-          checklistItems: (t.checklistItems || []).map(item => (item.id === updatedItem.id ? updatedItem : item))
-        } : t))
-      }));
-      return { ...oldData, lists: newListData };
+      return updateFn(oldData);
     });
   };
 
-  // --- 3. Mutasyonlar (Tümü en üstte tanımlanmalı) ---
+  /** Önbellekteki spesifik bir görevi günceller */
+  const updateTaskInCache = (taskId: string, updateFn: (oldTask: TaskDetailed) => TaskDetailed) => {
+    updateBoardDataInCache((oldBoard) => ({
+      ...oldBoard,
+      lists: oldBoard.lists.map(list => ({
+        ...list,
+        tasks: list.tasks.map(t => (t.id === taskId ? updateFn(t) : t))
+      }))
+    }));
+  };
+  
+  /** Önbellekteki spesifik bir alt görevi günceller */
+  const updateChecklistItemInCache = (itemId: string, updateFn: (oldItem: ChecklistItemDetailed) => ChecklistItemDetailed) => {
+    updateTaskInCache(task!.id, (oldTask) => ({
+      ...oldTask,
+      // DÜZELTME: (oldTask.checklistItems || []) null kontrolü
+      checklistItems: (oldTask.checklistItems || []).map(item => 
+        item.id === itemId ? updateFn(item) : item
+      )
+    }));
+  };
+
+  // --- 3. Mutasyonlar (Optimistic Update ile) ---
   
   const deleteTaskMutation = useMutation({
     mutationFn: () => taskService.deleteTask(task!.id),
@@ -111,7 +126,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
         return { ...oldData, lists: newListData };
       });
       toast.success('Görev silindi.');
-      onClose(); // Modalı kapat
+      onClose();
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Görev silinemedi.')),
   });
@@ -120,38 +135,31 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     mutationFn: (data: { title?: string, description?: string | null, approvalStatus?: TaskApprovalStatus }) => 
       taskService.updateTask(task!.id, data),
     onSuccess: (updatedTask) => {
-      // 'boardDetails' önbelleğini anlık olarak güncelle
+      if (!boardId) return;
       queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
         if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({
-          ...list,
-          tasks: list.tasks.map(t => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
-        }));
+        const newListData = oldData.lists.map(list => ({ ...list, tasks: list.tasks.map(t => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t)) }));
         return { ...oldData, lists: newListData };
       });
-      // Başlık için 'blur' sonrası state'i senkronize et
       setEditableTitle(updatedTask.title);
       setEditableDescription(updatedTask.description || '');
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Görev güncellenemedi.')),
   });
-  
-  // === DÜZELTME (Gecikme Sorunu - image_0683df.png): Kişi Atama (Optimistic Update) ===
+
+  // DÜZELTME: Optimistic Update eklendi
   const assignTaskMutation = useMutation({
     mutationFn: (assignUserId: string) => taskService.assignTask(task!.id, { assignUserId }),
     onMutate: async (assignUserId) => {
       await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
       const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
-      if (previousData && board) {
+      if (board) {
         const userToAssign = board.members.find(m => m.user.id === assignUserId)?.user;
         if (userToAssign) {
-          queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], {
-            ...previousData,
-            lists: previousData.lists.map(l => ({
-              ...l,
-              tasks: l.tasks.map(t => (t.id === task!.id ? { ...t, assignees: [...t.assignees, userToAssign] } : t))
-            }))
-          });
+          updateTaskInCache(task!.id, (oldTask) => ({
+            ...oldTask,
+            assignees: [...oldTask.assignees, userToAssign]
+          }));
         }
       }
       return { previousData };
@@ -167,21 +175,16 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     },
   });
 
-  // === DÜZELTME (Gecikme Sorunu - image_0683df.png): Kişi Çıkarma (Optimistic Update) ===
+  // DÜZELTME: Optimistic Update eklendi
   const unassignTaskMutation = useMutation({
     mutationFn: (unassignUserId: string) => taskService.unassignTask(task!.id, { unassignUserId }),
     onMutate: async (unassignUserId) => {
       await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
       const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
-      if (previousData) {
-        queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], {
-          ...previousData,
-          lists: previousData.lists.map(l => ({
-            ...l,
-            tasks: l.tasks.map(t => (t.id === task!.id ? { ...t, assignees: t.assignees.filter(a => a.id !== unassignUserId) } : t))
-          }))
-        });
-      }
+      updateTaskInCache(task!.id, (oldTask) => ({
+        ...oldTask,
+        assignees: oldTask.assignees.filter(a => a.id !== unassignUserId)
+      }));
       return { previousData };
     },
     onError: (err, variables, context) => {
@@ -195,69 +198,101 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     },
   });
 
+  // DÜZELTME: Optimistic Update eklendi
   const createChecklistItemMutation = useMutation({
     mutationFn: (text: string) => checklistService.createChecklistItem(task!.id, { text }),
-    onSuccess: (newItem) => {
-      // 'boardDetails' cache'ini anlık güncelle
-      queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
-        if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({
-          ...list,
-          tasks: list.tasks.map(t => (t.id === task!.id ? { ...t, checklistItems: [...t.checklistItems, newItem] } : t))
-        }));
-        return { ...oldData, lists: newListData };
-      });
+    onMutate: async (text) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+      
+      // DÜZELTME (image_9caaf6.png): 'taskId' alanı 'ChecklistItemDetailed' tipinde yok.
+      const optimisticItem: ChecklistItemDetailed = {
+        id: `temp-${Date.now()}`, text, isCompleted: false,
+        assignees: [], images: [],
+        // dueDate: undefined (opsiyonel)
+      };
+      
+      updateTaskInCache(task!.id, (oldTask) => ({
+        ...oldTask,
+        checklistItems: [...(oldTask.checklistItems || []), optimisticItem],
+        _count: { ...oldTask._count, checklistItems: (oldTask._count.checklistItems || 0) + 1 }
+      }));
       setNewChecklistItem('');
+      
+      return { previousData, optimisticItem };
     },
-    onError: (err) => toast.error(getErrorMessage(err, 'Alt görev eklenemedi.')),
+    onSuccess: (realItem, variables, context) => {
+      // Optimistic item'ı gerçek item ile değiştir
+      updateChecklistItemInCache(context!.optimisticItem.id, () => realItem);
+    },
+    onError: (err, variables, context) => {
+      toast.error(getErrorMessage(err, 'Alt görev eklenemedi.'));
+      // Hata durumunda optimistik güncellemeyi geri al
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+      setNewChecklistItem(variables);
+    },
   });
   
-  // Checklist Item Toggle (Tamamlandı İşaretle)
+  // DÜZELTME: Optimistic Update eklendi
   const toggleChecklistItemMutation = useMutation({
     mutationFn: (itemId: string) => checklistService.toggleChecklistItem(itemId),
-    onSuccess: (updatedItem) => {
-      updateChecklistItemInCache(updatedItem); // Yardımcı fonksiyonu kullan
+    onMutate: async (itemId) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+      updateChecklistItemInCache(itemId, (oldItem) => ({
+        ...oldItem,
+        isCompleted: !oldItem.isCompleted
+      }));
+      return { previousData };
     },
-    onError: (err) => toast.error(getErrorMessage(err, 'Alt görev durumu güncellenemedi.')),
+    onError: (err, variables, context) => {
+      toast.error(getErrorMessage(err, 'Alt görev durumu güncellenemedi.'));
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
+    },
   });
   
-  // Checklist Item Sil
+  // DÜZELTME: Optimistic Update eklendi
   const deleteChecklistItemMutation = useMutation({
     mutationFn: (itemId: string) => checklistService.deleteChecklistItem(itemId),
-    onSuccess: (_, itemId) => { // 'variables' (itemId) ikinci parametredir
-      queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
-        if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({
-          ...list,
-          tasks: list.tasks.map(t => (t.id === task!.id ? {
-            ...t,
-            checklistItems: (t.checklistItems || []).filter(item => item.id !== itemId)
-          } : t))
-        }));
-        return { ...oldData, lists: newListData };
-      });
-      toast.success('Alt görev silindi.');
+    onMutate: async (itemId) => {
+      await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
+      const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
+      updateTaskInCache(task!.id, (oldTask) => ({
+        ...oldTask,
+        checklistItems: (oldTask.checklistItems || []).filter(item => item.id !== itemId),
+        _count: { ...oldTask._count, checklistItems: (oldTask._count.checklistItems || 1) - 1 }
+      }));
+      return { previousData };
     },
-    onError: (err) => toast.error(getErrorMessage(err, 'Alt görev silinemedi.')),
+    onError: (err, variables, context) => {
+      toast.error(getErrorMessage(err, 'Alt görev silinemedi.'));
+      if (context?.previousData) {
+        queryClient.setQueryData(['boardDetails', boardId], context.previousData);
+      }
+    },
   });
 
-  // Alt Göreve Kişi Atama (Optimistic Update)
+  // DÜZELTME: Optimistic Update eklendi
   const assignChecklistItemMutation = useMutation({
     mutationFn: ({ itemId, assignUserId }: { itemId: string, assignUserId: string }) =>
       checklistService.assignToChecklistItem(itemId, { assignUserId }),
     onMutate: async ({ itemId, assignUserId }) => {
       await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
       const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
-      if (previousData && board) {
+      if (board) {
         const userToAssign = board.members.find(m => m.user.id === assignUserId)?.user;
         if (userToAssign) {
-          const newChecklistItem = previousData.lists
-            .flatMap(l => l.tasks)
-            .find(t => t.id === task!.id)
-            ?.checklistItems.find(item => item.id === itemId);
-          if (newChecklistItem) {
-            updateChecklistItemInCache({ ...newChecklistItem, assignees: [...newChecklistItem.assignees, userToAssign] });
-          }
+          updateChecklistItemInCache(itemId, (oldItem) => ({
+            ...oldItem,
+            assignees: [...(oldItem.assignees || []), userToAssign]
+          }));
         }
       }
       return { previousData };
@@ -273,22 +308,17 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     },
   });
 
-  // Alt Görevden Kişi Çıkarma (Optimistic Update)
+  // DÜZELTME: Optimistic Update eklendi
   const unassignChecklistItemMutation = useMutation({
     mutationFn: ({ itemId, unassignUserId }: { itemId: string, unassignUserId: string }) =>
       checklistService.unassignFromChecklistItem(itemId, { unassignUserId }),
     onMutate: async ({ itemId, unassignUserId }) => {
       await queryClient.cancelQueries({ queryKey: ['boardDetails', boardId] });
       const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
-      if (previousData) {
-         const newChecklistItem = previousData.lists
-            .flatMap(l => l.tasks)
-            .find(t => t.id === task!.id)
-            ?.checklistItems.find(item => item.id === itemId);
-         if (newChecklistItem) {
-            updateChecklistItemInCache({ ...newChecklistItem, assignees: newChecklistItem.assignees.filter(a => a.id !== unassignUserId) });
-         }
-      }
+      updateChecklistItemInCache(itemId, (oldItem) => ({
+        ...oldItem,
+        assignees: (oldItem.assignees || []).filter(a => a.id !== unassignUserId)
+      }));
       return { previousData };
     },
     onError: (err, variables, context) => {
@@ -302,46 +332,30 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
     },
   });
 
-  // Ek Yükleme Mutasyonu
   const uploadAttachmentMutation = useMutation({
     mutationFn: (files: File[]) => attachmentService.uploadAttachments(task!.id, files),
     onSuccess: (newAttachments) => {
-      // 'boardDetails' cache'ini anlık güncelle
-      queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
-        if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({
-          ...list,
-          tasks: list.tasks.map(t => (t.id === task!.id ? { ...t, attachments: [...(t.attachments || []), ...newAttachments] } : t))
-        }));
-        return { ...oldData, lists: newListData };
-      });
+      updateTaskInCache(task!.id, (oldTask) => ({
+        ...oldTask,
+        attachments: [...(oldTask.attachments || []), ...newAttachments]
+      }));
       toast.success('Dosyalar eklendi.');
     },
     onError: (err) => toast.error(getErrorMessage(err, "Dosya yüklenemedi.")),
   });
   
-  // Ek Silme Mutasyonu
   const deleteAttachmentMutation = useMutation({
     mutationFn: (attachmentId: string) => attachmentService.deleteAttachment(attachmentId),
     onSuccess: (_, attachmentId) => {
-      queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], (oldData) => {
-        if (!oldData) return oldData;
-        const newListData = oldData.lists.map(list => ({
-          ...list,
-          tasks: list.tasks.map(t => (t.id === task!.id ? {
-            ...t,
-            // DÜZELTME (image_dc4028.png): 'attachments' undefined olabilir
-            attachments: (t.attachments || []).filter(att => att.id !== attachmentId)
-          } : t))
-        }));
-        return { ...oldData, lists: newListData };
-      });
+      updateTaskInCache(task!.id, (oldTask) => ({
+        ...oldTask,
+        attachments: (oldTask.attachments || []).filter(att => att.id !== attachmentId)
+      }));
       toast.success('Ek silindi.');
     },
     onError: (err) => toast.error(getErrorMessage(err, "Ek silinemedi.")),
   });
   
-  // YENİ: Görev Reaksiyonu Mutasyonu (Optimistic)
   const toggleTaskReactionMutation = useMutation({
     mutationFn: (data: { taskId: string, emoji: string }) => 
       reactionService.toggleTaskReaction(data.taskId, { emoji: data.emoji }),
@@ -351,32 +365,23 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       const previousData = queryClient.getQueryData<BoardDetailed>(['boardDetails', boardId]);
 
       if (previousData) {
-        queryClient.setQueryData<BoardDetailed>(['boardDetails', boardId], {
-          ...previousData,
-          lists: previousData.lists.map(l => ({
-            ...l,
-            tasks: l.tasks.map(t => {
-              if (t.id !== taskId) return t;
-
-              const existingReactionIndex = (t.reactions || []).findIndex(
-                r => r.emoji === emoji && r.userId === user!.id
-              );
-              
-              let newReactions: ReactionSummary[];
-              if (existingReactionIndex > -1) {
-                newReactions = t.reactions.filter((r) => !(r.emoji === emoji && r.userId === user!.id));
-              } else {
-                const newReaction: ReactionSummary = {
-                  id: `temp-reaction-${Date.now()}`,
-                  emoji,
-                  userId: user!.id,
-                  user: { id: user!.id, name: user!.name }
-                };
-                newReactions = [...(t.reactions || []), newReaction];
-              }
-              return { ...t, reactions: newReactions };
-            })
-          }))
+        updateTaskInCache(taskId, (oldTask) => {
+          const existingReactionIndex = (oldTask.reactions || []).findIndex(
+            r => r.emoji === emoji && r.userId === user!.id
+          );
+          let newReactions: ReactionSummary[];
+          if (existingReactionIndex > -1) {
+            newReactions = oldTask.reactions.filter((r) => !(r.emoji === emoji && r.userId === user!.id));
+          } else {
+            const newReaction: ReactionSummary = {
+              id: `temp-reaction-${Date.now()}`,
+              emoji,
+              userId: user!.id,
+              user: { id: user!.id, name: user!.name }
+            };
+            newReactions = [...(oldTask.reactions || []), newReaction];
+          }
+          return { ...oldTask, reactions: newReactions };
         });
       }
       return { previousData };
@@ -399,8 +404,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       setEditableDescription(task.description || '');
     }
   }, [task]);
-  
-  // DÜZELTME (image_fb25fe.png): Hatalı scroll useEffect'i kaldırıldı.
 
   // --- 5. Erken Çıkış (Tüm Hook'lardan sonra) ---
   if (!task || !board) {
@@ -414,15 +417,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
   };
   const handleDescriptionBlur = () => {
     if (editableDescription !== (task.description || '')) { updateTaskMutation.mutate({ description: editableDescription }); }
-  };
-  const handleToggleCompleted = () => {
-    const newStatus = task.approvalStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
-    updateTaskMutation.mutate({ approvalStatus: newStatus });
-  };
-  const handleDeleteTask = () => {
-    if (window.confirm(`'${task.title}' görevini kalıcı olarak silmek istediğinizden emin misiniz?`)) {
-      deleteTaskMutation.mutate();
-    }
   };
   const handleAddChecklistItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -439,7 +433,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
 
   // --- 7. Hesaplamalar (Render için) ---
   const taskAssigneeIds = new Set((task.assignees || []).map(a => a.id));
-  const unassignedMembers = board.members.filter(m => !taskAssigneeIds.has(m.user.id));
+  const unassignedBoardMembers = board.members.filter(m => !taskAssigneeIds.has(m.user.id));
 
   // === ARAYÜZ (VIEW) YÖNETİMİ ===
   const modalConfig = {
@@ -466,7 +460,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
               className="w-full h-24 p-2 border border-zinc-700 bg-zinc-900 text-zinc-100 rounded-md focus:outline-none focus:ring-amber-400 focus:border-amber-400"
             />
           </div>
-          {/* YENİ: Görev Reaksiyonları */}
           <ReactionManager
             reactions={task.reactions || []}
             currentUserId={user!.id}
@@ -491,7 +484,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
                     <div className="flex items-center">
                       <img
                         className="w-6 h-6 rounded-full object-cover"
-                        src={getAvatarUrl(assignee.avatarUrl)}
+                        src={getAvatarUrl(assignee.avatarUrl, assignee.name)}
                         alt={assignee.name}
                       />
                       <span className="ml-2 text-sm text-zinc-100">{assignee.name}</span>
@@ -515,13 +508,13 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-2">Panodaki Diğer Üyeler</label>
              <div className="p-2 bg-zinc-900 rounded-md max-h-48 overflow-y-auto">
-                {unassignedMembers.length > 0 ? (
-                  unassignedMembers.map(member => (
+                {unassignedBoardMembers.length > 0 ? (
+                  unassignedBoardMembers.map(member => (
                     <div key={member.user.id} className="flex items-center justify-between group p-1.5 rounded-md hover:bg-zinc-700">
                       <div className="flex items-center">
                         <img
                           className="w-6 h-6 rounded-full object-cover"
-                          src={getAvatarUrl(member.user.avatarUrl)}
+                          src={getAvatarUrl(member.user.avatarUrl, member.user.name)}
                           alt={member.user.name}
                         />
                         <span className="ml-2 text-sm text-zinc-100">{member.user.name}</span>
@@ -551,7 +544,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
         <div className="space-y-2">
           <h4 className="text-lg font-semibold text-zinc-100">Ekler</h4>
           <div className="flex flex-wrap gap-2">
-            {/* DÜZELTME (image_dc4028.png): (task.attachments || []) eklendi */}
             {(task.attachments || []).map(att => (
               <AttachmentItem 
                 key={att.id} 
@@ -591,81 +583,99 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
       title: 'Alt Görevleri Yönet',
       size: 'lg',
       component: (
-         <div className="space-y-2">
-          <h4 className="text-lg font-semibold text-zinc-100">Alt Görevler</h4>
-          {/* DÜZELTME (image_82e3d6.png): Kaydırma ve yükseklik buraya (içeriğe) eklendi */}
-          <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-2">
-            {(task.checklistItems || []).map(item => {
-              const itemAssigneeIds = new Set((item.assignees || []).map(a => a.id));
-              const unassignedChecklistMembers = board.members.filter(m => !itemAssigneeIds.has(m.user.id));
-              
-              return (
-                <div key={item.id} className="flex items-center group -ml-1 pr-1 hover:bg-zinc-700 rounded-md">
-                  <input
-                    type="checkbox"
-                    checked={item.isCompleted}
-                    onChange={() => toggleChecklistItemMutation.mutate(item.id)}
-                    className="h-4 w-4 text-amber-400 bg-zinc-700 border-zinc-600 rounded focus:ring-amber-500 ml-1"
-                  />
-                  
-                  <span className={`flex-1 ml-3 text-sm ${item.isCompleted ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
-                    {item.text}
-                  </span>
-                  
-                  <div className="flex items-center space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                    {(item.assignees || []).map(assignee => (
-                       <button 
-                          key={assignee.id}
-                          onClick={() => unassignChecklistItemMutation.mutate({itemId: item.id, unassignUserId: assignee.id})}
-                          title={`Atamayı kaldır: ${assignee.name}`}
-                        >
-                          <img
-                            className="w-5 h-5 rounded-full object-cover border border-zinc-900"
-                            src={getAvatarUrl(assignee.avatarUrl)}
-                          />
-                        </button>
-                    ))}
+         // DÜZELTME (image_1ba342.png / image_9c4c82.png): Kaydırma ve yükseklik buraya (dış sarmalayıcıya) eklendi
+         <div className="flex flex-col max-h-[60vh]">
+          {/* Kaydırma alanı */}
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+            {/* DÜZELTME (Estetik): Başlık ve boşluk eklendi */}
+            <h4 className="text-lg font-semibold text-zinc-100 mb-3">Alt Görevler</h4>
+            
+            <div className="space-y-2">
+              {(task.checklistItems || []).map(item => {
+                const itemAssigneeIds = new Set((item.assignees || []).map(a => a.id));
+                const unassignedChecklistMembers = board.members.filter(m => !itemAssigneeIds.has(m.user.id));
+                
+                return (
+                  // DÜZELTME (Estetik): Padding eklendi
+                  <div key={item.id} className="flex items-center group -ml-1 pr-1 hover:bg-zinc-700 rounded-md p-2">
+                    <input
+                      type="checkbox"
+                      checked={item.isCompleted}
+                      onChange={() => toggleChecklistItemMutation.mutate(item.id)}
+                      // DÜZELTME (Estetik): Checkbox stilleri (Gri/Yeşil)
+                      className="h-5 w-5 text-green-500 bg-zinc-900 border-zinc-600 rounded focus:ring-green-500 focus:ring-offset-zinc-800"
+                    />
                     
-                    <Menu as="div" className="relative">
-                      <Menu.Button className="p-1 rounded-full text-zinc-400 hover:bg-zinc-600 hover:text-zinc-100" title="Alt göreve ata">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-                      </Menu.Button>
-                      <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100">
-                        <Menu.Items className="absolute right-0 bottom-full mb-1 w-48 max-h-48 overflow-y-auto rounded-md bg-zinc-900 border border-zinc-700 shadow-lg z-20">
-                          {unassignedChecklistMembers.length > 0 ? (
-                            unassignedChecklistMembers.map(member => (
-                              <Menu.Item key={member.user.id}>
-                                {({ active }) => (
-                                  <button
-                                    onClick={() => assignChecklistItemMutation.mutate({itemId: item.id, assignUserId: member.user.id})}
-                                    className={`${active ? 'bg-zinc-700' : ''} w-full text-left text-zinc-100 group flex items-center px-3 py-2 text-sm`}
-                                  >
-                                    {member.user.name}
-                                  </button>
-                                )}
-                              </Menu.Item>
-                            ))
-                          ) : (
-                            <div className="px-3 py-2 text-sm text-zinc-500">Atanacak başka üye yok.</div>
-                          )}
-                        </Menu.Items>
-                      </Transition>
-                    </Menu>
+                    <span className={`flex-1 ml-3 text-sm ${item.isCompleted ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                      {item.text}
+                    </span>
                     
-                    <button 
-                      onClick={() => deleteChecklistItemMutation.mutate(item.id)}
-                      className="p-1 text-zinc-400 hover:bg-zinc-600 hover:text-red-500 rounded-full"
-                      title="Alt görevi sil"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
+                    {/* DÜZELTME: Alt Görev Atama Arayüzü (Estetik ve Optimistic) */}
+                    <div className="flex items-center space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                      {(item.assignees || []).map(assignee => (
+                         <button 
+                            key={assignee.id}
+                            onClick={() => unassignChecklistItemMutation.mutate({itemId: item.id, unassignUserId: assignee.id})}
+                            title={`Atamayı kaldır: ${assignee.name}`}
+                          >
+                            <img
+                              className="w-5 h-5 rounded-full object-cover border border-zinc-900"
+                              src={getAvatarUrl(assignee.avatarUrl, assignee.name)}
+                              alt={assignee.name}
+                            />
+                          </button>
+                      ))}
+                      
+                      {/* DÜZELTME: z-index eklendi (image_9c4c82.png) */}
+                      <Menu as="div" className="relative z-10">
+                        {/* DÜZELTME (Estetik): Buton stili */}
+                        <Menu.Button className="p-1 rounded-full text-zinc-400 hover:bg-zinc-600 hover:text-zinc-100" title="Alt göreve ata">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                        </Menu.Button>
+                        <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100">
+                          {/* DÜZELTME: z-index eklendi (image_9c4c82.png) */}
+                          <Menu.Items className="absolute right-0 bottom-full mb-1 w-56 origin-top-right rounded-md bg-zinc-900 border border-zinc-700 shadow-lg z-20">
+                            {unassignedChecklistMembers.length > 0 ? (
+                              unassignedChecklistMembers.map(member => (
+                                <Menu.Item key={member.user.id}>
+                                  {({ active }) => (
+                                    <button
+                                      onClick={() => assignChecklistItemMutation.mutate({itemId: item.id, assignUserId: member.user.id})}
+                                      className={`${active ? 'bg-zinc-700' : ''} w-full text-left text-zinc-100 group flex items-center px-3 py-2`}
+                                    >
+                                      {/* DÜZELTME (Estetik): Avatar + İsim + Kullanıcı Adı */}
+                                      <img src={getAvatarUrl(member.user.avatarUrl, member.user.name)} className="w-6 h-6 rounded-full mr-2" />
+                                      <div className="flex flex-col items-start">
+                                        <span className="text-sm">{member.user.name}</span>
+                                        <span className="text-xs text-zinc-400">@{member.user.username || '...'}</span>
+                                      </div>
+                                    </button>
+                                  )}
+                                </Menu.Item>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-sm text-zinc-500">Atanacak başka üye yok.</div>
+                            )}
+                          </Menu.Items>
+                        </Transition>
+                      </Menu>
+                      
+                      {/* DÜZELTME (Estetik): Silme butonu stili */}
+                      <button 
+                        onClick={() => deleteChecklistItemMutation.mutate(item.id)}
+                        className="p-1 text-zinc-400 hover:bg-zinc-600 hover:text-red-500 rounded-full"
+                        title="Alt görevi sil"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-          {/* Yeni Alt Görev Ekleme Formu */}
-          <form onSubmit={handleAddChecklistItem} className="flex space-x-2 pt-2 border-t border-zinc-700">
+          {/* Yeni Alt Görev Ekleme Formu (Kaydırma alanının dışında) */}
+          <form onSubmit={handleAddChecklistItem} className="flex space-x-2 pt-4 border-t border-zinc-700">
             <input
               type="text"
               value={newChecklistItem}
@@ -673,8 +683,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClose, task
               placeholder="Yeni alt görev ekle..."
               className="flex-1 px-3 py-2 border border-zinc-700 bg-zinc-900 text-zinc-100 rounded-md"
             />
-            {/* DÜZELTME: Yazım hatası (image_05fc3f.png) */}
-            <button type="submit" disabled={createChecklistItemMutation.isPending} className="px-3 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600">
+            {/* DÜZELTME (Estetik): Buton stili güncellendi */}
+            <button 
+              type="submit" 
+              disabled={createChecklistItemMutation.isPending} 
+              className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-md hover:bg-zinc-600 disabled:opacity-50"
+            >
               {createChecklistItemMutation.isPending ? <Spinner size="sm" /> : 'Ekle'}
             </button>
           </form>

@@ -219,7 +219,6 @@ export interface TaskDetailed {
 }
 
 export interface ChecklistItemDetailed {
-  taskId: string;
   id: string;
   text: string;
   isCompleted: boolean;

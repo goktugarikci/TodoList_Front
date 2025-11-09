@@ -3,15 +3,15 @@ import React, { useState, useRef, useEffect, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { commentService } from '../../services/commentService';
 import { reactionService } from '../../services/reactionService';
-import { useAuth, API_SOCKET_URL } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatMessageTimestamp } from '../../utils/formatDate';
 import { getErrorMessage } from '../../utils/errorHelper';
 import Spinner from '../common/Spinner';
 import { toast } from 'react-hot-toast';
-// DÜZELTME (image_1b9c5d.png): Tipleri import et
 import type { TaskComment, ReactionSummary } from '../../types/api';
 import ReactionManager from '../common/ReactionManager';
-import { Menu, Transition } from '@headlessui/react'; // Silme menüsü için
+import { Menu, Transition } from '@headlessui/react'; 
+// YENİ: Avatar URL yardımcısı
 import { getAvatarUrl } from '../../utils/getAvatarUrl';
 
 interface TaskCommentsProps {
@@ -24,12 +24,11 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
-  const commentsEndRef = useRef<HTMLDivElement>(null); // En alta kaydırmak için
+  const commentsEndRef = useRef<HTMLDivElement>(null); 
 
   // 1. Yorumları Çekme
   const { data: comments, isLoading, isError, error } = useQuery<TaskComment[]>({
     queryKey: ['comments', taskId],
-    // DÜZELTME (image_1b9172.png): Fonksiyon adı düzeltildi
     queryFn: () => commentService.getCommentsForTask(taskId),
   });
 
@@ -45,11 +44,10 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
         id: `temp-${Date.now()}`,
         text,
         createdAt: new Date().toISOString(),
-        // author objesi 'UserAssigneeDto' bekliyor
         author: {
           id: user!.id,
           name: user!.name,
-          avatarUrl: user!.avatarUrl, // user null olamaz (bu bileşen sadece girişliyken görünür)
+          avatarUrl: user!.avatarUrl,
         },
         reactions: [],
       };
@@ -66,7 +64,7 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
         )
       );
       queryClient.invalidateQueries({ queryKey: ['boardDetails', boardId] });
-      scrollToBottom(); // Yeni mesaj gönderince en alta kaydır
+      scrollToBottom(); 
     },
     onError: (err, variables, context) => {
       toast.error(getErrorMessage(err, 'Yorum eklenemedi.'));
@@ -148,7 +146,6 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
     commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
   
-  // Yorumlar yüklendiğinde en alta kaydır
   useEffect(() => {
     scrollToBottom();
   }, [comments]);
@@ -177,7 +174,8 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
           <div key={comment.id} className="flex items-start space-x-3 group">
             <img
               className="w-8 h-8 rounded-full object-cover"
-              src={getAvatarUrl(comment.author?.avatarUrl)}
+              // DÜZELTME (image_4579e5.png): getAvatarUrl kullan
+              src={getAvatarUrl(comment.author?.avatarUrl, comment.author?.name || '?')}
               alt={comment.author?.name || 'Bilinmeyen'}
             />
             <div className="flex-1">
@@ -251,7 +249,8 @@ const TaskComments: React.FC<TaskCommentsProps> = ({ taskId, taskTitle, boardId 
       <form onSubmit={handleSubmit} className="flex items-start space-x-3 pt-4 mt-4 border-t border-zinc-700">
         <img
           className="w-8 h-8 rounded-full object-cover"
-          src={getAvatarUrl(user?.avatarUrl)}
+          // DÜZELTME (image_4579e5.png): getAvatarUrl kullan
+          src={getAvatarUrl(user?.avatarUrl, user?.name)}
           alt="Siz"
         />
         <textarea
